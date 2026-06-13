@@ -14,7 +14,255 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      match_results: {
+        Row: {
+          away_score: number
+          home_score: number
+          match_id: string
+          outcome: string
+          updated_at: string
+        }
+        Insert: {
+          away_score: number
+          home_score: number
+          match_id: string
+          outcome: string
+          updated_at?: string
+        }
+        Update: {
+          away_score?: number
+          home_score?: number
+          match_id?: string
+          outcome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_results_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matchdays: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+        }
+        Relationships: []
+      }
+      matches: {
+        Row: {
+          away_team: string
+          created_at: string
+          home_team: string
+          id: string
+          kickoff_at: string
+          matchday_id: string
+          position: number
+        }
+        Insert: {
+          away_team: string
+          created_at?: string
+          home_team: string
+          id?: string
+          kickoff_at: string
+          matchday_id: string
+          position?: number
+        }
+        Update: {
+          away_team?: string
+          created_at?: string
+          home_team?: string
+          id?: string
+          kickoff_at?: string
+          matchday_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      predictions: {
+        Row: {
+          away_score: number
+          home_score: number
+          id: string
+          match_id: string
+          outcome: string
+          submission_id: string
+        }
+        Insert: {
+          away_score: number
+          home_score: number
+          id?: string
+          match_id: string
+          outcome: string
+          submission_id: string
+        }
+        Update: {
+          away_score?: number
+          home_score?: number
+          id?: string
+          match_id?: string
+          outcome?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predictions_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predictions_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      submissions: {
+        Row: {
+          id: string
+          matchday_id: string
+          submitted_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          matchday_id: string
+          submitted_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          matchday_id?: string
+          submitted_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submissions_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_predictions: {
+        Row: {
+          champion: string
+          id: string
+          submitted_at: string
+          top_scorer: string
+          user_id: string
+        }
+        Insert: {
+          champion: string
+          id?: string
+          submitted_at?: string
+          top_scorer: string
+          user_id: string
+        }
+        Update: {
+          champion?: string
+          id?: string
+          submitted_at?: string
+          top_scorer?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_results: {
+        Row: {
+          champion_1st: string | null
+          champion_2nd: string | null
+          champion_3rd: string | null
+          id: string
+          top_scorer_1st: string | null
+          top_scorer_2nd: string | null
+          updated_at: string
+        }
+        Insert: {
+          champion_1st?: string | null
+          champion_2nd?: string | null
+          champion_3rd?: string | null
+          id?: string
+          top_scorer_1st?: string | null
+          top_scorer_2nd?: string | null
+          updated_at?: string
+        }
+        Update: {
+          champion_1st?: string | null
+          champion_2nd?: string | null
+          champion_3rd?: string | null
+          id?: string
+          top_scorer_1st?: string | null
+          top_scorer_2nd?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          created_at: string
+          id: string
+          is_admin: boolean
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_admin?: boolean
+          username: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_admin?: boolean
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

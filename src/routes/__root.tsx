@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -77,14 +78,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "World Cup Pool — Football Predictions" },
+      { name: "description", content: "A friendly football prediction pool for friends. Pick outcomes and exact scores, no passwords needed." },
+      { property: "og:title", content: "World Cup Pool — Football Predictions" },
+      { property: "og:description", content: "A friendly football prediction pool for friends. Pick outcomes and exact scores, no passwords needed." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "World Cup Pool — Football Predictions" },
+      { name: "twitter:description", content: "A friendly football prediction pool for friends. Pick outcomes and exact scores, no passwords needed." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9a1e455b-f164-4ea7-ad23-a64970476394/id-preview-61044efa--53e299ec-97af-4e0c-a5b0-7e0a094acfda.lovable.app-1781068334440.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9a1e455b-f164-4ea7-ad23-a64970476394/id-preview-61044efa--53e299ec-97af-4e0c-a5b0-7e0a094acfda.lovable.app-1781068334440.png" },
     ],
     links: [
       {
@@ -120,6 +123,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster richColors position="top-center" />
     </QueryClientProvider>
   );
 }
