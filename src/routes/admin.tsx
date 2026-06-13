@@ -154,6 +154,23 @@ function MatchdayAdminCard({ matchday }: { matchday: MD }) {
     else qc.invalidateQueries({ queryKey: ["admin-md", matchday.id] });
   };
 
+  const deleteMatchday = async () => {
+    if (!confirm(`Delete "${matchday.label}" and all its matches, submissions and predictions? This cannot be undone.`)) return;
+    const { data: ms } = await supabase.from("matches").select("id").eq("matchday_id", matchday.id);
+    const matchIds = (ms ?? []).map((m: any) => m.id);
+    const { data: ss } = await supabase.from("submissions").select("id").eq("matchday_id", matchday.id);
+    const subIds = (ss ?? []).map((s: any) => s.id);
+    if (subIds.length) await supabase.from("predictions").delete().in("submission_id", subIds);
+    if (matchIds.length) await supabase.from("match_results").delete().in("match_id", matchIds);
+    if (subIds.length) await supabase.from("submissions").delete().in("id", subIds);
+    if (matchIds.length) await supabase.from("matches").delete().in("id", matchIds);
+    const { error } = await supabase.from("matchdays").delete().eq("id", matchday.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Matchday deleted");
+    qc.invalidateQueries({ queryKey: ["admin-matchdays"] });
+    qc.invalidateQueries({ queryKey: ["open-matchdays"] });
+  };
+
   const exportCsv = async () => {
     // Fetch all submissions + users + predictions
     const { data: subs } = await supabase
@@ -213,6 +230,9 @@ function MatchdayAdminCard({ matchday }: { matchday: MD }) {
           title={isClosed ? "Export CSV" : "Available after first kickoff"}
         >
           <Download className="mr-1 h-4 w-4" /> Export CSV
+        </Button>
+        <Button variant="destructive" size="sm" onClick={deleteMatchday}>
+          <Trash2 className="mr-1 h-4 w-4" /> Delete matchday
         </Button>
       </div>
 
