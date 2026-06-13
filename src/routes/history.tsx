@@ -189,6 +189,8 @@ function MatchdayDetail({
     );
   };
 
+  const myMatchIds = new Set(data.mine.map((p: any) => p.match_id));
+
   return (
     <div className="space-y-6 pb-2 pt-1">
       {mySubmissionId ? (
