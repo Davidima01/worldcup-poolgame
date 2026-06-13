@@ -227,6 +227,9 @@ function MatchdayDetail({
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Other users' predictions
           </h3>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Only matches you've predicted are shown. Vote a match to reveal others' picks for it.
+          </p>
           {data.others.length === 0 ? (
             <p className="text-sm text-muted-foreground">No one else submitted.</p>
           ) : (
@@ -235,7 +238,7 @@ function MatchdayDetail({
                 <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">User</th>
-                    {data.matches.map((m: any) => (
+                    {data.matches.filter((m: any) => myMatchIds.has(m.id)).map((m: any) => (
                       <th key={m.id} className="px-3 py-2 whitespace-nowrap">
                         {m.home_team} vs {m.away_team}
                       </th>
@@ -246,7 +249,7 @@ function MatchdayDetail({
                   {data.others.map((o) => (
                     <tr key={o.username} className="border-t border-border">
                       <td className="px-3 py-2 font-medium">@{o.username}</td>
-                      {data.matches.map((m: any) => {
+                      {data.matches.filter((m: any) => myMatchIds.has(m.id)).map((m: any) => {
                         const p = o.preds.find((x: any) => x.match_id === m.id);
                         return (
                           <td key={m.id} className="px-3 py-2 whitespace-nowrap">
