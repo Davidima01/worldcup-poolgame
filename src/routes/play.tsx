@@ -7,16 +7,8 @@ import { useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Clock, CheckCircle2, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/play")({
   head: () => ({ meta: [{ title: "Open Matchdays — Friends Pool" }] }),
@@ -64,7 +56,6 @@ function PlayPage() {
         .order("kickoff_at", { ascending: true });
       if (e2) throw e2;
 
-      // Fetch all predictions for this user across these matches
       const { data: subs, error: e3 } = await supabase
         .from("submissions")
         .select("id,matchday_id")
@@ -114,14 +105,14 @@ function PlayPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Open matchdays</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {data.length} matchday{data.length === 1 ? "" : "s"} waiting for your predictions.
-              Each match closes at its own kickoff.
+              Save each match on its own — it locks once you submit it.
             </p>
           </div>
           {data.map((om) => (
             <MatchdaySection
               key={om.matchday.id}
               openMd={om}
-              onSubmitted={() => qc.invalidateQueries({ queryKey: ["open-matchdays"] })}
+              onSaved={() => qc.invalidateQueries({ queryKey: ["open-matchdays"] })}
               userId={user.id}
             />
           ))}
@@ -133,11 +124,11 @@ function PlayPage() {
 
 function MatchdaySection({
   openMd,
-  onSubmitted,
+  onSaved,
   userId,
 }: {
   openMd: OpenMatchday;
-  onSubmitted: () => void;
+  onSaved: () => void;
   userId: string;
 }) {
   const { matchday, matches, nextKickoff } = openMd;
@@ -147,19 +138,6 @@ function MatchdaySection({
     return () => clearInterval(t);
   }, []);
 
-  const [picks, setPicks] = useState<Record<string, Pick>>(() =>
-    Object.fromEntries(matches.map((m) => [m.id, { outcome: "", home: "", away: "" } as Pick])),
-  );
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // Only matches still open at "now" can be submitted
-  const submittable = useMemo(
-    () => matches.filter((m) => new Date(m.kickoff_at).getTime() > now && isComplete(picks[m.id])),
-    [matches, picks, now],
-  );
-  const hasAnySubmittable = submittable.length > 0;
-
   return (
     <section className="rounded-2xl border border-border bg-card/40 p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -167,7 +145,10 @@ function MatchdaySection({
           <h2 className="text-xl font-semibold tracking-tight">{matchday.label}</h2>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />
-            Next kickoff in <span className="font-mono font-medium text-foreground">{formatCountdown(nextKickoff.getTime() - now)}</span>
+            Next kickoff in{" "}
+            <span className="font-mono font-medium text-foreground">
+              {formatCountdown(nextKickoff.getTime() - now)}
+            </span>
           </p>
         </div>
         <Badge variant="default">
@@ -176,78 +157,148 @@ function MatchdaySection({
       </div>
 
       <div className="space-y-3">
-        {matches.map((m) => {
-          const closed = new Date(m.kickoff_at).getTime() <= now;
-          return (
-            <MatchCard
-              key={m.id}
-              match={m}
-              disabled={closed}
-              pick={picks[m.id] ?? { outcome: "", home: "", away: "" }}
-              onChange={(p) => setPicks((prev) => ({ ...prev, [m.id]: p }))}
-            />
-          );
-        })}
+        {matches.map((m) => (
+          <MatchCard
+            key={m.id}
+            match={m}
+            now={now}
+            userId={userId}
+            matchdayId={matchday.id}
+            onSaved={onSaved}
+          />
+        ))}
       </div>
-
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {hasAnySubmittable
-            ? `${submittable.length} ready to submit`
-            : "Complete picks for at least one open match"}
-        </p>
-        <Button size="lg" disabled={!hasAnySubmittable} onClick={() => setReviewOpen(true)}>
-          Review & Submit
-        </Button>
-      </div>
-
-      <ReviewDialog
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        matches={submittable}
-        picks={picks}
-        saving={saving}
-        onConfirm={async () => {
-          setSaving(true);
-          try {
-            // Re-check kickoff right before submit
-            const stillOpen = submittable.filter(
-              (m) => new Date(m.kickoff_at).getTime() > Date.now(),
-            );
-            if (stillOpen.length === 0) {
-              toast.error("All these matches have already started.");
-              setReviewOpen(false);
-              onSubmitted();
-              return;
-            }
-            const { data: sub, error: e1 } = await supabase
-              .from("submissions")
-              .insert({ user_id: userId, matchday_id: matchday.id })
-              .select("id")
-              .single();
-            if (e1) throw e1;
-            const rows = stillOpen.map((m) => ({
-              submission_id: sub.id,
-              match_id: m.id,
-              outcome: picks[m.id].outcome as "1" | "X" | "2",
-              home_score: Number(picks[m.id].home),
-              away_score: Number(picks[m.id].away),
-            }));
-            const { error: e2 } = await supabase.from("predictions").insert(rows);
-            if (e2) throw e2;
-            toast.success(
-              `Submitted ${stillOpen.length} pick${stillOpen.length === 1 ? "" : "s"} for ${matchday.label}!`,
-            );
-            setReviewOpen(false);
-            onSubmitted();
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Could not submit");
-          } finally {
-            setSaving(false);
-          }
-        }}
-      />
     </section>
+  );
+}
+
+function MatchCard({
+  match,
+  now,
+  userId,
+  matchdayId,
+  onSaved,
+}: {
+  match: Match;
+  now: number;
+  userId: string;
+  matchdayId: string;
+  onSaved: () => void;
+}) {
+  const [pick, setPick] = useState<Pick>({ outcome: "", home: "", away: "" });
+  const [saving, setSaving] = useState(false);
+  const k = new Date(match.kickoff_at);
+  const closed = k.getTime() <= now;
+  const complete = isComplete(pick);
+
+  const save = async () => {
+    if (!complete) return;
+    if (k.getTime() <= Date.now()) {
+      toast.error("This match has already started.");
+      onSaved();
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data: sub, error: e1 } = await supabase
+        .from("submissions")
+        .insert({ user_id: userId, matchday_id: matchdayId })
+        .select("id")
+        .single();
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from("predictions").insert({
+        submission_id: sub.id,
+        match_id: match.id,
+        outcome: pick.outcome as "1" | "X" | "2",
+        home_score: Number(pick.home),
+        away_score: Number(pick.away),
+      });
+      if (e2) throw e2;
+      toast.success(`Saved: ${match.home_team} vs ${match.away_team}`);
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const countdown = useMemo(() => formatCountdown(k.getTime() - now), [k, now]);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium">
+          {match.home_team} <span className="text-muted-foreground">vs</span> {match.away_team}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{k.toLocaleString()}</span>
+          {closed ? (
+            <Badge variant="destructive">CLOSED</Badge>
+          ) : (
+            <span className="font-mono text-foreground">{countdown}</span>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-4">
+        <div className="flex gap-1">
+          {(["1", "X", "2"] as const).map((o) => (
+            <button
+              key={o}
+              type="button"
+              disabled={closed || saving}
+              onClick={() => setPick((p) => ({ ...p, outcome: o }))}
+              className={`h-9 w-10 rounded-md border text-sm font-medium transition-colors ${
+                pick.outcome === o
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background hover:bg-secondary"
+              } disabled:opacity-50`}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            inputMode="numeric"
+            className="w-16 text-center"
+            placeholder="0"
+            value={pick.home}
+            disabled={closed || saving}
+            onChange={(e) =>
+              setPick((p) => ({ ...p, home: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) }))
+            }
+          />
+          <span className="text-muted-foreground">–</span>
+          <Input
+            inputMode="numeric"
+            className="w-16 text-center"
+            placeholder="0"
+            value={pick.away}
+            disabled={closed || saving}
+            onChange={(e) =>
+              setPick((p) => ({ ...p, away: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) }))
+            }
+          />
+        </div>
+        <div className="ml-auto">
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={closed || saving || !complete}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -268,131 +319,6 @@ function formatCountdown(ms: number) {
   const pad = (n: number) => String(n).padStart(2, "0");
   if (days > 0) return `${days}d ${pad(h)}:${pad(m)}:${pad(sec)}`;
   return `${pad(h)}:${pad(m)}:${pad(sec)}`;
-}
-
-function MatchCard({
-  match,
-  pick,
-  onChange,
-  disabled,
-}: {
-  match: Match;
-  pick: Pick;
-  onChange: (p: Pick) => void;
-  disabled?: boolean;
-}) {
-  const k = new Date(match.kickoff_at);
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium">
-          {match.home_team} <span className="text-muted-foreground">vs</span> {match.away_team}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{k.toLocaleString()}</span>
-          {disabled && <Badge variant="destructive">CLOSED</Badge>}
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center gap-4">
-        <div className="flex gap-1">
-          {(["1", "X", "2"] as const).map((o) => (
-            <button
-              key={o}
-              type="button"
-              disabled={disabled}
-              onClick={() => onChange({ ...pick, outcome: o })}
-              className={`h-9 w-10 rounded-md border text-sm font-medium transition-colors ${
-                pick.outcome === o
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background hover:bg-secondary"
-              } disabled:opacity-50`}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            inputMode="numeric"
-            className="w-16 text-center"
-            placeholder="0"
-            value={pick.home}
-            disabled={disabled}
-            onChange={(e) =>
-              onChange({ ...pick, home: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) })
-            }
-          />
-          <span className="text-muted-foreground">–</span>
-          <Input
-            inputMode="numeric"
-            className="w-16 text-center"
-            placeholder="0"
-            value={pick.away}
-            disabled={disabled}
-            onChange={(e) =>
-              onChange({ ...pick, away: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) })
-            }
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReviewDialog({
-  open,
-  onOpenChange,
-  matches,
-  picks,
-  onConfirm,
-  saving,
-}: {
-  open: boolean;
-  onOpenChange: (b: boolean) => void;
-  matches: Match[];
-  picks: Record<string, Pick>;
-  onConfirm: () => void;
-  saving: boolean;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Review your predictions</DialogTitle>
-          <DialogDescription>
-            Only matches that haven't started yet will be submitted. Submissions are permanent.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="my-2 max-h-[50vh] space-y-2 overflow-y-auto rounded-md border border-border p-3">
-          {matches.map((m) => {
-            const p = picks[m.id];
-            return (
-              <div key={m.id} className="flex items-center justify-between text-sm">
-                <span>
-                  {m.home_team} vs {m.away_team}
-                </span>
-                <span className="font-mono font-medium">
-                  {p?.outcome} | {p?.home}-{p?.away}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          Once confirmed, you can't change these picks.
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Back
-          </Button>
-          <Button onClick={onConfirm} disabled={saving || matches.length === 0}>
-            {saving ? "Saving…" : "Confirm & save permanently"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function EmptyState() {
