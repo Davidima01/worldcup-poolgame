@@ -138,42 +138,65 @@ function HistoryPage() {
           You haven't predicted any match yet.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="sticky left-0 z-10 bg-muted/40 px-3 py-2">User</th>
-                {data.matches.map((m: any) => (
-                  <th key={m.id} className="px-3 py-2 whitespace-nowrap">
-                    <div className="text-[10px] font-normal normal-case text-muted-foreground/70">
-                      {data.matchdays[m.matchday_id]}
-                    </div>
-                    <div>{m.home_team} vs {m.away_team}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-border bg-primary/5">
-                <td className="sticky left-0 z-10 bg-primary/5 px-3 py-2 font-semibold">You</td>
-                {data.matches.map((m: any) => (
-                  <td key={m.id} className="px-3 py-2 whitespace-nowrap">
-                    {renderPick(data.myPreds[m.id], m.id)}
-                  </td>
-                ))}
-              </tr>
-              {data.others.map((o) => (
-                <tr key={o.username} className="border-t border-border">
-                  <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">@{o.username}</td>
-                  {data.matches.map((m: any) => (
-                    <td key={m.id} className="px-3 py-2 whitespace-nowrap">
-                      {renderPick(o.preds[m.id], m.id)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {(() => {
+            const groups = new Map<string, any[]>();
+            data.matches.forEach((m: any) => {
+              if (!groups.has(m.matchday_id)) groups.set(m.matchday_id, []);
+              groups.get(m.matchday_id)!.push(m);
+            });
+            return Array.from(groups.entries()).map(([mdId, matches]) => {
+              const matchIds = new Set(matches.map((m) => m.id));
+              const othersHere = data.others.filter((o) =>
+                matches.some((m) => o.preds[m.id]),
+              );
+              return (
+                <section key={mdId}>
+                  <h2 className="mb-2 text-sm font-semibold tracking-wide text-muted-foreground">
+                    {data.matchdays[mdId]}
+                  </h2>
+                  <div className="overflow-x-auto rounded-xl border border-border bg-card">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="sticky left-0 z-10 bg-muted/40 px-3 py-2">User</th>
+                          {matches.map((m: any) => (
+                            <th key={m.id} className="px-3 py-2 whitespace-nowrap">
+                              {m.home_team} vs {m.away_team}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t border-border bg-primary/5">
+                          <td className="sticky left-0 z-10 bg-primary/5 px-3 py-2 font-semibold">
+                            You
+                          </td>
+                          {matches.map((m: any) => (
+                            <td key={m.id} className="px-3 py-2 whitespace-nowrap">
+                              {renderPick(data.myPreds[m.id], m.id)}
+                            </td>
+                          ))}
+                        </tr>
+                        {othersHere.map((o) => (
+                          <tr key={o.username} className="border-t border-border">
+                            <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">
+                              @{o.username}
+                            </td>
+                            {matches.map((m: any) => (
+                              <td key={m.id} className="px-3 py-2 whitespace-nowrap">
+                                {renderPick(o.preds[m.id], m.id)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              );
+            });
+          })()}
         </div>
       )}
     </AppShell>
