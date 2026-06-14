@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { useSession } from "@/lib/session";
-import { Check, X } from "lucide-react";
+import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "History — Friends Pool" }] }),
@@ -14,6 +14,16 @@ export const Route = createFileRoute("/history")({
 function HistoryPage() {
   const { user, ready } = useSession();
   const navigate = useNavigate();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (ready && !user) navigate({ to: "/" });
@@ -138,7 +148,7 @@ function HistoryPage() {
           You haven't predicted any match yet.
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-3">
           {(() => {
             const groups = new Map<string, any[]>();
             data.matches.forEach((m: any) => {
@@ -150,50 +160,69 @@ function HistoryPage() {
               const othersHere = data.others.filter((o) =>
                 matches.some((m) => o.preds[m.id]),
               );
+              const isOpen = expanded.has(mdId);
+              const totalPlayers = 1 + othersHere.length;
               return (
-                <section key={mdId}>
-                  <h2 className="mb-2 text-sm font-semibold tracking-wide text-muted-foreground">
-                    {data.matchdays[mdId]}
-                  </h2>
-                  <div className="overflow-x-auto rounded-xl border border-border bg-card">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                          <th className="sticky left-0 z-10 bg-muted/40 px-3 py-2">User</th>
-                          {matches.map((m: any) => (
-                            <th key={m.id} className="px-3 py-2 whitespace-nowrap">
-                              {m.home_team} vs {m.away_team}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-t border-border bg-primary/5">
-                          <td className="sticky left-0 z-10 bg-primary/5 px-3 py-2 font-semibold">
-                            You
-                          </td>
-                          {matches.map((m: any) => (
-                            <td key={m.id} className="px-3 py-2 whitespace-nowrap">
-                              {renderPick(data.myPreds[m.id], m.id)}
-                            </td>
-                          ))}
-                        </tr>
-                        {othersHere.map((o) => (
-                          <tr key={o.username} className="border-t border-border">
-                            <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">
-                              @{o.username}
+                <div key={mdId} className="rounded-xl border border-border bg-card overflow-hidden">
+                  <button
+                    onClick={() => toggle(mdId)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex items-center gap-2">
+                      {isOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="text-sm font-semibold tracking-wide">
+                        {data.matchdays[mdId]}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {matches.length} match{matches.length !== 1 ? "es" : ""} · {totalPlayers} player{totalPlayers !== 1 ? "s" : ""}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="overflow-x-auto border-t border-border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                          <tr>
+                            <th className="sticky left-0 z-10 bg-muted px-3 py-2 border-r border-border">User</th>
+                            {matches.map((m: any) => (
+                              <th key={m.id} className="px-3 py-2 whitespace-nowrap">
+                                {m.home_team} vs {m.away_team}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t border-border bg-muted">
+                            <td className="sticky left-0 z-10 bg-muted px-3 py-2 font-semibold border-r border-border">
+                              You
                             </td>
                             {matches.map((m: any) => (
                               <td key={m.id} className="px-3 py-2 whitespace-nowrap">
-                                {renderPick(o.preds[m.id], m.id)}
+                                {renderPick(data.myPreds[m.id], m.id)}
                               </td>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                          {othersHere.map((o) => (
+                            <tr key={o.username} className="border-t border-border">
+                              <td className="sticky left-0 z-10 bg-background px-3 py-2 font-medium border-r border-border">
+                                @{o.username}
+                              </td>
+                              {matches.map((m: any) => (
+                                <td key={m.id} className="px-3 py-2 whitespace-nowrap">
+                                  {renderPick(o.preds[m.id], m.id)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               );
             });
           })()}
