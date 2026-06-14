@@ -120,10 +120,10 @@ function SubmitCard({ userId, onDone }: { userId: string; onDone: () => void }) 
       <h2 className="mb-4 font-medium">Make your picks</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block space-y-1.5">
-          <span className="text-sm text-muted-foreground">Tournament winner</span>
+          <span className="text-sm text-muted-foreground">World Cup winner</span>
           <Input
             value={champion}
-            placeholder="e.g. Real Madrid"
+            placeholder="e.g. Spagna"
             maxLength={60}
             onChange={(e) => setChampion(e.target.value)}
           />
@@ -132,7 +132,7 @@ function SubmitCard({ userId, onDone }: { userId: string; onDone: () => void }) 
           <span className="text-sm text-muted-foreground">Top scorer</span>
           <Input
             value={topScorer}
-            placeholder="e.g. Erling Haaland"
+            placeholder="e.g. Harry Kane"
             maxLength={60}
             onChange={(e) => setTopScorer(e.target.value)}
           />
@@ -153,7 +153,7 @@ function SubmitCard({ userId, onDone }: { userId: string; onDone: () => void }) 
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-md border border-border p-3 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Champion</span><span className="font-medium">{champion}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">World Cup winner</span><span className="font-medium">{champion}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Top scorer</span><span className="font-medium">{topScorer}</span></div>
           </div>
           <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
