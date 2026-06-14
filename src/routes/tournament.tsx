@@ -85,7 +85,7 @@ function LockedCard({ mine }: { mine: Row }) {
     <section className="rounded-2xl border border-border bg-card/40 p-5">
       <div className="mb-3 flex items-center gap-2">
         <Lock className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-medium">Your picks (locked)</h2>
+        <h2 className="font-medium">Your picks </h2>
         <Badge variant="secondary" className="ml-auto">
           {new Date(mine.submitted_at).toLocaleString()}
         </Badge>
