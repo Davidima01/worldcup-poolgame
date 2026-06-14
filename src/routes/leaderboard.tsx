@@ -298,7 +298,7 @@ function LeaderboardPage() {
                     <td className="py-3 pr-4 text-right tabular-nums">
                       {r.streak > 0 ? (
                         <span className="inline-flex items-center gap-1">
-                          {r.streak} <span aria-hidden>{r.streak >= 5 ? "🔵🔥" : "🔥"}</span>
+                          {r.streak} <span aria-hidden>{r.streak >= 5 ? "⚡" : "🔥"}</span>
                         </span>
                       ) : (
                         <span className="text-muted-foreground">0</span>
