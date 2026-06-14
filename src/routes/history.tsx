@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { useSession } from "@/lib/session";
-import { Check, X } from "lucide-react";
+import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "History — Friends Pool" }] }),
