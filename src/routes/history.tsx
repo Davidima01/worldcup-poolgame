@@ -14,6 +14,16 @@ export const Route = createFileRoute("/history")({
 function HistoryPage() {
   const { user, ready } = useSession();
   const navigate = useNavigate();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (ready && !user) navigate({ to: "/" });
