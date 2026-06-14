@@ -10,7 +10,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Friends Pool — Football Predictions" },
+      { title: "World Cup Pool — Football Predictions" },
       {
         name: "description",
         content: "A friendly football prediction pool for friends. Pick 1/X/2 and exact scores.",
@@ -49,7 +49,7 @@ function Index() {
           <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
             <Trophy className="h-7 w-7" />
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight">Friends Pool</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">World Cup Pool</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Predict the matchday with your crew. No passwords, just a username.
           </p>
