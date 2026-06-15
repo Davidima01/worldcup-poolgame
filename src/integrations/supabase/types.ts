@@ -104,7 +104,9 @@ export type Database = {
       }
       predictions: {
         Row: {
+          admin_edited_at: string | null
           away_score: number
+          edited_by_admin: boolean
           home_score: number
           id: string
           match_id: string
@@ -112,7 +114,9 @@ export type Database = {
           submission_id: string
         }
         Insert: {
+          admin_edited_at?: string | null
           away_score: number
+          edited_by_admin?: boolean
           home_score: number
           id?: string
           match_id: string
@@ -120,7 +124,9 @@ export type Database = {
           submission_id: string
         }
         Update: {
+          admin_edited_at?: string | null
           away_score?: number
+          edited_by_admin?: boolean
           home_score?: number
           id?: string
           match_id?: string
@@ -182,21 +188,27 @@ export type Database = {
       }
       tournament_predictions: {
         Row: {
+          admin_edited_at: string | null
           champion: string
+          edited_by_admin: boolean
           id: string
           submitted_at: string
           top_scorer: string
           user_id: string
         }
         Insert: {
+          admin_edited_at?: string | null
           champion: string
+          edited_by_admin?: boolean
           id?: string
           submitted_at?: string
           top_scorer: string
           user_id: string
         }
         Update: {
+          admin_edited_at?: string | null
           champion?: string
+          edited_by_admin?: boolean
           id?: string
           submitted_at?: string
           top_scorer?: string
