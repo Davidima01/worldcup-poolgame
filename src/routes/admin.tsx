@@ -245,27 +245,13 @@ function MatchdayAdminCard({ matchday }: { matchday: MD }) {
 
       <div className="space-y-2">
         {(data?.matches ?? []).map((m: any) => (
-          <div
+          <MatchRowEditable
             key={m.id}
-            className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm"
-          >
-            <div>
-              <span className="font-medium">
-                {m.home_team} vs {m.away_team}
-              </span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                {new Date(m.kickoff_at).toLocaleString()}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => removeMatch(m.id)}
-              disabled={isClosed}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+            match={m}
+            onChanged={() => qc.invalidateQueries({ queryKey: ["admin-md", matchday.id] })}
+            onRemove={() => removeMatch(m.id)}
+            canRemove={!isClosed}
+          />
         ))}
         {data && data.matches.length === 0 && (
           <p className="text-sm text-muted-foreground">No matches yet.</p>
