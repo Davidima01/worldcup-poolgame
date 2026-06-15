@@ -1,15 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
-import { useSession } from "@/lib/session";
+import { useSession, isAdmin } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Download } from "lucide-react";
+import { Plus, Trash2, Download, Save, UserX, ShieldAlert, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { AdminBadge } from "@/components/AdminBadge";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Friends Pool" }] }),
@@ -22,7 +23,9 @@ function AdminPage() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    if (ready && !user) navigate({ to: "/" });
+    if (!ready) return;
+    if (!user) navigate({ to: "/" });
+    else if (!isAdmin(user)) navigate({ to: "/play" });
   }, [ready, user, navigate]);
 
   const [label, setLabel] = useState("");
@@ -56,7 +59,7 @@ function AdminPage() {
     }
   };
 
-  if (!ready || !user) return null;
+  if (!ready || !user || !isAdmin(user)) return null;
 
   return (
     <AppShell>
@@ -95,6 +98,10 @@ function AdminPage() {
           </div>
         )}
       </div>
+
+      <UserPicksOverride />
+      <TournamentOverride />
+      <InactiveUsers />
     </AppShell>
   );
 }
@@ -238,27 +245,13 @@ function MatchdayAdminCard({ matchday }: { matchday: MD }) {
 
       <div className="space-y-2">
         {(data?.matches ?? []).map((m: any) => (
-          <div
+          <MatchRowEditable
             key={m.id}
-            className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm"
-          >
-            <div>
-              <span className="font-medium">
-                {m.home_team} vs {m.away_team}
-              </span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                {new Date(m.kickoff_at).toLocaleString()}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => removeMatch(m.id)}
-              disabled={isClosed}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+            match={m}
+            onChanged={() => qc.invalidateQueries({ queryKey: ["admin-md", matchday.id] })}
+            onRemove={() => removeMatch(m.id)}
+            canRemove={!isClosed}
+          />
         ))}
         {data && data.matches.length === 0 && (
           <p className="text-sm text-muted-foreground">No matches yet.</p>
@@ -277,6 +270,469 @@ function MatchdayAdminCard({ matchday }: { matchday: MD }) {
           <Button onClick={addMatch}>
             <Plus className="mr-1 h-4 w-4" /> Add
           </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function toLocalInputValue(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function MatchRowEditable({
+  match, onChanged, onRemove, canRemove,
+}: {
+  match: any;
+  onChanged: () => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(() => toLocalInputValue(match.kickoff_at));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setVal(toLocalInputValue(match.kickoff_at)); }, [match.kickoff_at]);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from("matches")
+      .update({ kickoff_at: new Date(val).toISOString() })
+      .eq("id", match.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Kickoff updated");
+    setEditing(false);
+    onChanged();
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+      <div className="font-medium">
+        {match.home_team} vs {match.away_team}
+      </div>
+      <div className="flex items-center gap-2">
+        {editing ? (
+          <>
+            <Input
+              type="datetime-local"
+              value={val}
+              onChange={(e) => setVal(e.target.value)}
+              className="h-8 w-[200px]"
+            />
+            <Button size="sm" onClick={save} disabled={saving}>
+              <Save className="h-3 w-3" />
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+          </>
+        ) : (
+          <>
+            <span className="text-xs text-muted-foreground">
+              {new Date(match.kickoff_at).toLocaleString()}
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(true)} title="Edit kickoff">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onRemove} disabled={!canRemove}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   ADMIN: Override user predictions per matchday
+   ========================================================= */
+function UserPicksOverride() {
+  const qc = useQueryClient();
+  const [mdId, setMdId] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
+
+  const { data: mds } = useQuery({
+    queryKey: ["admin-all-mds"],
+    queryFn: async () => {
+      const { data } = await supabase.from("matchdays").select("id,label").order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+  const { data: users } = useQuery({
+    queryKey: ["admin-all-users"],
+    queryFn: async () => {
+      const { data } = await supabase.from("users").select("id,username").order("username");
+      return data ?? [];
+    },
+  });
+  const { data: ctx } = useQuery({
+    queryKey: ["admin-edit-ctx", mdId, userId],
+    enabled: !!mdId && !!userId,
+    queryFn: async () => {
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("id,home_team,away_team,kickoff_at")
+        .eq("matchday_id", mdId)
+        .order("kickoff_at", { ascending: true });
+      const { data: sub } = await supabase
+        .from("submissions")
+        .select("id")
+        .eq("matchday_id", mdId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      let preds: any[] = [];
+      if (sub) {
+        const { data: p } = await supabase
+          .from("predictions")
+          .select("id,match_id,outcome,home_score,away_score,edited_by_admin,admin_edited_at")
+          .eq("submission_id", sub.id);
+        preds = p ?? [];
+      }
+      return { matches: matches ?? [], submission: sub, preds };
+    },
+  });
+
+  return (
+    <section className="mt-10 rounded-xl border border-border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <ShieldAlert className="h-4 w-4 text-amber-500" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Override user picks (any matchday, even closed)
+        </h2>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Matchday</Label>
+          <select
+            value={mdId}
+            onChange={(e) => setMdId(e.target.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">— select —</option>
+            {(mds ?? []).map((m: any) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>User</Label>
+          <select
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">— select —</option>
+            {(users ?? []).map((u: any) => (
+              <option key={u.id} value={u.id}>@{u.username}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {mdId && userId && ctx && (
+        <div className="mt-5 space-y-3">
+          {ctx.matches.length === 0 && (
+            <p className="text-sm text-muted-foreground">No matches in this matchday.</p>
+          )}
+          {ctx.matches.map((m: any) => {
+            const existing = ctx.preds.find((p) => p.match_id === m.id);
+            return (
+              <PredictionEditor
+                key={m.id}
+                match={m}
+                existing={existing}
+                submissionId={ctx.submission?.id ?? null}
+                userId={userId}
+                matchdayId={mdId}
+                onSaved={() => qc.invalidateQueries({ queryKey: ["admin-edit-ctx", mdId, userId] })}
+              />
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PredictionEditor({
+  match, existing, submissionId, userId, matchdayId, onSaved,
+}: {
+  match: any;
+  existing?: { id: string; outcome: string; home_score: number; away_score: number; edited_by_admin?: boolean; admin_edited_at?: string | null };
+  submissionId: string | null;
+  userId: string;
+  matchdayId: string;
+  onSaved: () => void;
+}) {
+  const [outcome, setOutcome] = useState<"" | "1" | "X" | "2">((existing?.outcome as any) ?? "");
+  const [home, setHome] = useState(existing ? String(existing.home_score) : "");
+  const [away, setAway] = useState(existing ? String(existing.away_score) : "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setOutcome((existing?.outcome as any) ?? "");
+    setHome(existing ? String(existing.home_score) : "");
+    setAway(existing ? String(existing.away_score) : "");
+  }, [existing?.id]);
+
+  const valid = outcome !== "" && /^\d{1,2}$/.test(home) && /^\d{1,2}$/.test(away);
+
+  const save = async () => {
+    if (!valid) return;
+    setSaving(true);
+    try {
+      let subId = submissionId;
+      if (!subId) {
+        const { data, error } = await supabase
+          .from("submissions")
+          .insert({ user_id: userId, matchday_id: matchdayId })
+          .select("id")
+          .single();
+        if (error) throw error;
+        subId = data.id;
+      }
+      const payload = {
+        outcome: outcome as "1" | "X" | "2",
+        home_score: Number(home),
+        away_score: Number(away),
+        edited_by_admin: true,
+        admin_edited_at: new Date().toISOString(),
+      };
+      if (existing) {
+        const { error } = await supabase.from("predictions").update(payload).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("predictions").insert({
+          submission_id: subId,
+          match_id: match.id,
+          ...payload,
+        });
+        if (error) throw error;
+      }
+      toast.success("Pick saved");
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-background p-3">
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <div className="font-medium">{match.home_team} vs {match.away_team}</div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{new Date(match.kickoff_at).toLocaleString()}</span>
+          {existing?.edited_by_admin && <AdminBadge at={existing.admin_edited_at} />}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-1">
+          {(["1", "X", "2"] as const).map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => setOutcome(o)}
+              className={`h-9 w-10 rounded-md border text-sm font-medium ${
+                outcome === o
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background hover:bg-secondary"
+              }`}
+            >{o}</button>
+          ))}
+        </div>
+        <Input className="w-14 text-center" inputMode="numeric" value={home}
+          onChange={(e) => setHome(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))} />
+        <span className="text-muted-foreground">–</span>
+        <Input className="w-14 text-center" inputMode="numeric" value={away}
+          onChange={(e) => setAway(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))} />
+        <Button size="sm" className="ml-auto" disabled={!valid || saving} onClick={save}>
+          <Save className="mr-1 h-3.5 w-3.5" />
+          {saving ? "Saving…" : existing ? "Update" : "Create"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   ADMIN: Override tournament picks
+   ========================================================= */
+function TournamentOverride() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["admin-tournament"],
+    queryFn: async () => {
+      const [{ data: users }, { data: picks }] = await Promise.all([
+        supabase.from("users").select("id,username").order("username"),
+        supabase.from("tournament_predictions").select("id,user_id,champion,top_scorer,edited_by_admin,admin_edited_at"),
+      ]);
+      return { users: users ?? [], picks: picks ?? [] };
+    },
+  });
+
+  return (
+    <section className="mt-8 rounded-xl border border-border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <ShieldAlert className="h-4 w-4 text-amber-500" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Override tournament picks
+        </h2>
+      </div>
+      <div className="space-y-2">
+        {(data?.users ?? []).map((u: any) => {
+          const pick = data?.picks.find((p: any) => p.user_id === u.id);
+          return (
+            <TournamentRowEditor
+              key={u.id}
+              user={u}
+              pick={pick}
+              onSaved={() => qc.invalidateQueries({ queryKey: ["admin-tournament"] })}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TournamentRowEditor({
+  user, pick, onSaved,
+}: { user: any; pick?: any; onSaved: () => void }) {
+  const [champ, setChamp] = useState(pick?.champion ?? "");
+  const [scorer, setScorer] = useState(pick?.top_scorer ?? "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setChamp(pick?.champion ?? "");
+    setScorer(pick?.top_scorer ?? "");
+  }, [pick?.id]);
+
+  const valid = champ.trim().length >= 2 && scorer.trim().length >= 2;
+
+  const save = async () => {
+    if (!valid) return;
+    setSaving(true);
+    try {
+      const payload = {
+        champion: champ.trim(),
+        top_scorer: scorer.trim(),
+        edited_by_admin: true,
+        admin_edited_at: new Date().toISOString(),
+      };
+      if (pick) {
+        const { error } = await supabase.from("tournament_predictions").update(payload).eq("id", pick.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("tournament_predictions").insert({ user_id: user.id, ...payload });
+        if (error) throw error;
+      }
+      toast.success("Tournament pick saved");
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-background p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+        @{user.username}
+        {pick?.edited_by_admin && <AdminBadge at={pick.admin_edited_at} />}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <Input placeholder="Champion" value={champ} onChange={(e) => setChamp(e.target.value)} maxLength={60} />
+        <Input placeholder="Top scorer" value={scorer} onChange={(e) => setScorer(e.target.value)} maxLength={60} />
+        <Button size="sm" disabled={!valid || saving} onClick={save}>
+          <Save className="mr-1 h-3.5 w-3.5" />
+          {saving ? "Saving…" : pick ? "Update" : "Create"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   ADMIN: Remove inactive users (>48h)
+   ========================================================= */
+function InactiveUsers() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["admin-inactive"],
+    queryFn: async () => {
+      const [{ data: users }, { data: subs }, { data: tps }] = await Promise.all([
+        supabase.from("users").select("id,username,created_at"),
+        supabase.from("submissions").select("user_id,submitted_at"),
+        supabase.from("tournament_predictions").select("user_id,submitted_at"),
+      ]);
+      const lastActivity = new Map<string, number>();
+      (users ?? []).forEach((u: any) => lastActivity.set(u.id, new Date(u.created_at).getTime()));
+      const bump = (uid: string, iso: string) => {
+        const t = new Date(iso).getTime();
+        if (t > (lastActivity.get(uid) ?? 0)) lastActivity.set(uid, t);
+      };
+      (subs ?? []).forEach((s: any) => bump(s.user_id, s.submitted_at));
+      (tps ?? []).forEach((t: any) => bump(t.user_id, t.submitted_at));
+      return (users ?? []).map((u: any) => ({
+        ...u,
+        lastActivity: lastActivity.get(u.id) ?? 0,
+      }));
+    },
+  });
+
+  const cutoff = Date.now() - 48 * 3600 * 1000;
+  const inactive = useMemo(
+    () => (data ?? []).filter((u: any) => u.lastActivity < cutoff).sort((a: any, b: any) => a.lastActivity - b.lastActivity),
+    [data, cutoff],
+  );
+
+  const remove = async (u: any) => {
+    if (!confirm(`Remove @${u.username}? This deletes their submissions, predictions and tournament picks.`)) return;
+    const { data: subs } = await supabase.from("submissions").select("id").eq("user_id", u.id);
+    const subIds = (subs ?? []).map((s: any) => s.id);
+    if (subIds.length) await supabase.from("predictions").delete().in("submission_id", subIds);
+    if (subIds.length) await supabase.from("submissions").delete().in("id", subIds);
+    await supabase.from("tournament_predictions").delete().eq("user_id", u.id);
+    const { error } = await supabase.from("users").delete().eq("id", u.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Removed @${u.username}`);
+    qc.invalidateQueries({ queryKey: ["admin-inactive"] });
+    qc.invalidateQueries({ queryKey: ["admin-all-users"] });
+  };
+
+  const fmtAgo = (t: number) => {
+    const h = Math.floor((Date.now() - t) / 3600000);
+    if (h < 48) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return `${d}d ago`;
+  };
+
+  return (
+    <section className="mt-8 rounded-xl border border-border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <UserX className="h-4 w-4 text-red-500" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Inactive users (48h+)
+        </h2>
+      </div>
+      {inactive.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No inactive users.</p>
+      ) : (
+        <div className="space-y-2">
+          {inactive.map((u: any) => (
+            <div key={u.id} className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm">
+              <div>
+                <span className="font-medium">@{u.username}</span>
+                <span className="ml-2 text-xs text-muted-foreground">last active {fmtAgo(u.lastActivity)}</span>
+              </div>
+              <Button variant="destructive" size="sm" onClick={() => remove(u)}>
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
+              </Button>
+            </div>
+          ))}
         </div>
       )}
     </section>

@@ -5,6 +5,11 @@ const KEY = "pool_user";
 
 export type SessionUser = { id: string; username: string; is_admin: boolean };
 
+export const ADMIN_USERNAME = "davidima01";
+export function isAdmin(u: SessionUser | null | undefined): boolean {
+  return !!u && u.username === ADMIN_USERNAME;
+}
+
 export function getSession(): SessionUser | null {
   if (typeof window === "undefined") return null;
   try {
