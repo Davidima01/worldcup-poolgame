@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { useSession } from "@/lib/session";
 import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
+import { AdminBadge } from "@/components/AdminBadge";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "History — Friends Pool" }] }),
@@ -43,7 +44,7 @@ function HistoryPage() {
       if (mySubIds.length) {
         const { data: p } = await supabase
           .from("predictions")
-          .select("match_id,outcome,home_score,away_score")
+          .select("match_id,outcome,home_score,away_score,edited_by_admin,admin_edited_at")
           .in("submission_id", mySubIds);
         myPreds = p ?? [];
       }
@@ -84,7 +85,7 @@ function HistoryPage() {
       if (otherSubIds.length) {
         const { data: p } = await supabase
           .from("predictions")
-          .select("submission_id,match_id,outcome,home_score,away_score")
+          .select("submission_id,match_id,outcome,home_score,away_score,edited_by_admin,admin_edited_at")
           .in("submission_id", otherSubIds)
           .in("match_id", myMatchIds);
         otherPreds = p ?? [];
@@ -131,6 +132,7 @@ function HistoryPage() {
           {scoreOk === true && <Check className="h-3 w-3 text-emerald-500" />}
           {scoreOk === false && <X className="h-3 w-3 text-red-500" />}
         </span>
+        {p.edited_by_admin && <AdminBadge at={p.admin_edited_at} />}
       </span>
     );
   };
