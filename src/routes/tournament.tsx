@@ -12,13 +12,21 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Crown, AlertTriangle, Lock, Eye, EyeOff } from "lucide-react";
+import { AdminBadge } from "@/components/AdminBadge";
 
 export const Route = createFileRoute("/tournament")({
   head: () => ({ meta: [{ title: "Tournament Picks — Friends Pool" }] }),
   component: TournamentPage,
 });
 
-type Row = { user_id: string; champion: string; top_scorer: string; submitted_at: string };
+type Row = {
+  user_id: string;
+  champion: string;
+  top_scorer: string;
+  submitted_at: string;
+  edited_by_admin?: boolean;
+  admin_edited_at?: string | null;
+};
 
 function TournamentPage() {
   const { user, ready } = useSession();
@@ -34,7 +42,9 @@ function TournamentPage() {
     enabled: !!user,
     queryFn: async () => {
       const [{ data: picks, error: e1 }, { data: users, error: e2 }] = await Promise.all([
-        supabase.from("tournament_predictions").select("user_id,champion,top_scorer,submitted_at"),
+        supabase
+          .from("tournament_predictions")
+          .select("user_id,champion,top_scorer,submitted_at,edited_by_admin,admin_edited_at"),
         supabase.from("users").select("id,username"),
       ]);
       if (e1) throw e1;
@@ -94,6 +104,9 @@ function LockedCard({ mine }: { mine: Row }) {
         <Field label="Champion" value={mine.champion} />
         <Field label="Top scorer" value={mine.top_scorer} />
       </dl>
+      {mine.edited_by_admin && (
+        <div className="mt-3"><AdminBadge at={mine.admin_edited_at} /></div>
+      )}
     </section>
   );
 }
@@ -225,7 +238,12 @@ function OthersCard({
               {others.map((r) => (
                 <tr key={r.user_id} className="border-t border-border/60">
                   <td className="py-2 pr-4 font-medium">@{usernames[r.user_id] ?? "?"}</td>
-                  <td className="py-2 pr-4">{r.champion}</td>
+                  <td className="py-2 pr-4">
+                    <span className="inline-flex items-center gap-1.5">
+                      {r.champion}
+                      {r.edited_by_admin && <AdminBadge at={r.admin_edited_at} />}
+                    </span>
+                  </td>
                   <td className="py-2">{r.top_scorer}</td>
                 </tr>
               ))}
