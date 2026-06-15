@@ -1,15 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
-import { useSession } from "@/lib/session";
+import { useSession, isAdmin } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Download } from "lucide-react";
+import { Plus, Trash2, Download, Save, UserX, ShieldAlert, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { AdminBadge } from "@/components/AdminBadge";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Friends Pool" }] }),
@@ -22,7 +23,9 @@ function AdminPage() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    if (ready && !user) navigate({ to: "/" });
+    if (!ready) return;
+    if (!user) navigate({ to: "/" });
+    else if (!isAdmin(user)) navigate({ to: "/play" });
   }, [ready, user, navigate]);
 
   const [label, setLabel] = useState("");
@@ -56,7 +59,7 @@ function AdminPage() {
     }
   };
 
-  if (!ready || !user) return null;
+  if (!ready || !user || !isAdmin(user)) return null;
 
   return (
     <AppShell>
@@ -95,6 +98,10 @@ function AdminPage() {
           </div>
         )}
       </div>
+
+      <UserPicksOverride />
+      <TournamentOverride />
+      <InactiveUsers />
     </AppShell>
   );
 }
