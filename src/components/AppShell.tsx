@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Trophy, History, ShieldCheck, LogOut, Crown, ClipboardCheck, BarChart3, Moon, Sun } from "lucide-react";
-import { useSession, setSession } from "@/lib/session";
+import { useSession, setSession, isAdmin } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
 import type { ReactNode } from "react";
@@ -18,7 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/results", label: "Results", icon: ClipboardCheck },
     { to: "/leaderboard", label: "Leaderboard", icon: BarChart3 },
     { to: "/history", label: "History", icon: History },
-    { to: "/admin", label: "Manage", icon: ShieldCheck },
+    ...(isAdmin(user) ? [{ to: "/admin", label: "Manage", icon: ShieldCheck }] : []),
   ];
 
 
