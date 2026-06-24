@@ -337,6 +337,16 @@ function LeaderboardPage() {
                     <td className="py-3 pr-4 text-right text-base font-semibold tabular-nums">
                       {r.total.toFixed(1).replace(/\.0$/, "")}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </AppShell>
+  );
+}
                 ))}
               </tbody>
             </table>
