@@ -347,12 +347,3 @@ function LeaderboardPage() {
     </AppShell>
   );
 }
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </AppShell>
-  );
-}
