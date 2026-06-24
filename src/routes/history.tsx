@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { useSession } from "@/lib/session";
 import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
-import { AdminBadge } from "@/components/AdminBadge";
+
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "History — Friends Pool" }] }),
@@ -132,7 +132,6 @@ function HistoryPage() {
           {scoreOk === true && <Check className="h-3 w-3 text-emerald-500" />}
           {scoreOk === false && <X className="h-3 w-3 text-red-500" />}
         </span>
-        {p.edited_by_admin && <AdminBadge at={p.admin_edited_at} />}
       </span>
     );
   };

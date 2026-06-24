@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Crown, AlertTriangle, Lock, Eye, EyeOff } from "lucide-react";
-import { AdminBadge } from "@/components/AdminBadge";
+
 
 export const Route = createFileRoute("/tournament")({
   head: () => ({ meta: [{ title: "Tournament Picks — Friends Pool" }] }),
@@ -104,9 +104,6 @@ function LockedCard({ mine }: { mine: Row }) {
         <Field label="Champion" value={mine.champion} />
         <Field label="Top scorer" value={mine.top_scorer} />
       </dl>
-      {mine.edited_by_admin && (
-        <div className="mt-3"><AdminBadge at={mine.admin_edited_at} /></div>
-      )}
     </section>
   );
 }
@@ -241,7 +238,6 @@ function OthersCard({
                   <td className="py-2 pr-4">
                     <span className="inline-flex items-center gap-1.5">
                       {r.champion}
-                      {r.edited_by_admin && <AdminBadge at={r.admin_edited_at} />}
                     </span>
                   </td>
                   <td className="py-2">{r.top_scorer}</td>
