@@ -279,7 +279,6 @@ function LeaderboardPage() {
                   <th className="py-3 pr-2"></th>
                   <th className="py-3 pr-4">Player</th>
                   <th className="py-3 pr-4 text-right">Streak</th>
-                  <th className="py-3 pr-4 text-right">Total</th>
                   {showDetails && (
                     <>
                       <th className="py-3 pr-4 text-right">Exact</th>
@@ -288,6 +287,7 @@ function LeaderboardPage() {
                       <th className="py-3 pr-4 text-right">Tournament</th>
                     </>
                   )}
+                  <th className="py-3 pr-4 text-right">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -326,9 +326,6 @@ function LeaderboardPage() {
                         <span className="text-muted-foreground">0</span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-right text-base font-semibold tabular-nums">
-                      {r.total.toFixed(1).replace(/\.0$/, "")}
-                    </td>
                     {showDetails && (
                       <>
                         <td className="py-3 pr-4 text-right tabular-nums">{r.exactScores}</td>
@@ -337,6 +334,9 @@ function LeaderboardPage() {
                         <td className="py-3 pr-4 text-right tabular-nums">{r.tournament.toFixed(1).replace(/\.0$/, "")}</td>
                       </>
                     )}
+                    <td className="py-3 pr-4 text-right text-base font-semibold tabular-nums">
+                      {r.total.toFixed(1).replace(/\.0$/, "")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
