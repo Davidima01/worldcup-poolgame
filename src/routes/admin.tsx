@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Download, Save, UserX, ShieldAlert, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { AdminBadge } from "@/components/AdminBadge";
 
 
 export const Route = createFileRoute("/admin")({
