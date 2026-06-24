@@ -1,0 +1,2 @@
+UPDATE public.predictions SET edited_by_admin = false, admin_edited_at = NULL WHERE edited_by_admin = true;
+UPDATE public.tournament_predictions SET edited_by_admin = false, admin_edited_at = NULL WHERE edited_by_admin = true;

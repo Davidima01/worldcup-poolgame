@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { useSession } from "@/lib/session";
-import { BarChart3, Crown, Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { BarChart3, Crown, Trophy, TrendingUp, TrendingDown, Minus, ChevronRight, ChevronLeft } from "lucide-react";
+import { useState } from "react";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({ meta: [{ title: "Leaderboard — Friends Pool" }] }),
@@ -115,6 +116,7 @@ function rankMap(scores: Map<string, Breakdown>, userIds: string[], usernames: M
 function LeaderboardPage() {
   const { user, ready } = useSession();
   const navigate = useNavigate();
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     if (ready && !user) navigate({ to: "/" });
@@ -254,6 +256,22 @@ function LeaderboardPage() {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-border bg-card/40">
+            <div className="flex justify-end px-3 pt-3">
+              <button
+                onClick={() => setShowDetails((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition hover:bg-secondary"
+              >
+                {showDetails ? (
+                  <>
+                    <ChevronLeft className="h-3.5 w-3.5" /> Hide details
+                  </>
+                ) : (
+                  <>
+                    Show details <ChevronRight className="h-3.5 w-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
@@ -261,11 +279,15 @@ function LeaderboardPage() {
                   <th className="py-3 pr-2"></th>
                   <th className="py-3 pr-4">Player</th>
                   <th className="py-3 pr-4 text-right">Streak</th>
-                  <th className="py-3 pr-4 text-right">Exact</th>
-                  <th className="py-3 pr-4 text-right">1X2</th>
-                  <th className="py-3 pr-4 text-right" title="Rarity bonus from outcomes">Bonus</th>
-                  <th className="py-3 pr-4 text-right">Tournament</th>
                   <th className="py-3 pr-4 text-right">Total</th>
+                  {showDetails && (
+                    <>
+                      <th className="py-3 pr-4 text-right">Exact</th>
+                      <th className="py-3 pr-4 text-right">1X2</th>
+                      <th className="py-3 pr-4 text-right" title="Rarity bonus from outcomes">Bonus</th>
+                      <th className="py-3 pr-4 text-right">Tournament</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -304,13 +326,17 @@ function LeaderboardPage() {
                         <span className="text-muted-foreground">0</span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-right tabular-nums">{r.exactScores}</td>
-                    <td className="py-3 pr-4 text-right tabular-nums">{r.outcomeBase}</td>
-                    <td className="py-3 pr-4 text-right tabular-nums">{r.outcomeBonus.toFixed(1).replace(/\.0$/, "")}</td>
-                    <td className="py-3 pr-4 text-right tabular-nums">{r.tournament.toFixed(1).replace(/\.0$/, "")}</td>
                     <td className="py-3 pr-4 text-right text-base font-semibold tabular-nums">
                       {r.total.toFixed(1).replace(/\.0$/, "")}
                     </td>
+                    {showDetails && (
+                      <>
+                        <td className="py-3 pr-4 text-right tabular-nums">{r.exactScores}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums">{r.outcomeBase}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums">{r.outcomeBonus.toFixed(1).replace(/\.0$/, "")}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums">{r.tournament.toFixed(1).replace(/\.0$/, "")}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

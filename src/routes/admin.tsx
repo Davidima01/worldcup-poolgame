@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Download, Save, UserX, ShieldAlert, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { AdminBadge } from "@/components/AdminBadge";
 
 
 export const Route = createFileRoute("/admin")({
@@ -522,7 +523,10 @@ function PredictionEditor({
   return (
     <div className="rounded-md border border-border bg-background p-3">
       <div className="mb-2 flex items-center justify-between text-sm">
-        <div className="font-medium">{match.home_team} vs {match.away_team}</div>
+        <div className="flex items-center gap-2 font-medium">
+          <span>{match.home_team} vs {match.away_team}</span>
+          {existing?.edited_by_admin && <AdminBadge at={existing.admin_edited_at} />}
+        </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{new Date(match.kickoff_at).toLocaleString()}</span>
         </div>
@@ -640,6 +644,7 @@ function TournamentRowEditor({
     <div className="rounded-md border border-border bg-background p-3">
       <div className="mb-2 flex items-center gap-2 text-sm font-medium">
         @{user.username}
+        {pick?.edited_by_admin && <AdminBadge at={pick.admin_edited_at} />}
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
         <Input placeholder="Champion" value={champ} onChange={(e) => setChamp(e.target.value)} maxLength={60} />

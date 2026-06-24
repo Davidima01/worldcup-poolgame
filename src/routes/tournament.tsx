@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Crown, AlertTriangle, Lock, Eye, EyeOff } from "lucide-react";
+import { AdminBadge } from "@/components/AdminBadge";
 
 
 export const Route = createFileRoute("/tournament")({
@@ -96,6 +97,7 @@ function LockedCard({ mine }: { mine: Row }) {
       <div className="mb-3 flex items-center gap-2">
         <Lock className="h-4 w-4 text-muted-foreground" />
         <h2 className="font-medium">Your picks </h2>
+        {mine.edited_by_admin && <AdminBadge at={mine.admin_edited_at} />}
         <Badge variant="secondary" className="ml-auto">
           {new Date(mine.submitted_at).toLocaleString()}
         </Badge>
@@ -234,7 +236,12 @@ function OthersCard({
             <tbody>
               {others.map((r) => (
                 <tr key={r.user_id} className="border-t border-border/60">
-                  <td className="py-2 pr-4 font-medium">@{usernames[r.user_id] ?? "?"}</td>
+                  <td className="py-2 pr-4 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      @{usernames[r.user_id] ?? "?"}
+                      {r.edited_by_admin && <AdminBadge at={r.admin_edited_at} />}
+                    </span>
+                  </td>
                   <td className="py-2 pr-4">
                     <span className="inline-flex items-center gap-1.5">
                       {r.champion}
