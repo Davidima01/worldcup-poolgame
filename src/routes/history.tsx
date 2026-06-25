@@ -23,9 +23,19 @@ function HistoryPage() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      if (typeof document !== "undefined") {
+        if (next.size > 0) document.body.classList.add("scene-zoom");
+        else document.body.classList.remove("scene-zoom");
+      }
       return next;
     });
   };
+
+  useEffect(() => {
+    return () => {
+      if (typeof document !== "undefined") document.body.classList.remove("scene-zoom");
+    };
+  }, []);
 
   useEffect(() => {
     if (ready && !user) navigate({ to: "/" });
