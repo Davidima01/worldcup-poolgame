@@ -480,45 +480,64 @@ function PredictionEditor({
   const valid = outcome !== "" && /^\d{1,2}$/.test(home) && /^\d{1,2}$/.test(away);
 
   const save = async () => {
-    if (!valid) return;
-    setSaving(true);
-    try {
-      let subId = submissionId;
-      if (!subId) {
-        const { data, error } = await supabase
-          .from("submissions")
-          .insert({ user_id: userId, matchday_id: matchdayId })
-          .select("id")
-          .single();
-        if (error) throw error;
-        subId = data.id;
-      }
-      const payload = {
-        outcome: outcome as "1" | "X" | "2",
-        home_score: Number(home),
-        away_score: Number(away),
-        edited_by_admin: true,
-        admin_edited_at: new Date().toISOString(),
-      };
-      if (existing) {
-        const { error } = await supabase.from("predictions").update(payload).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("predictions").insert({
+  if (!valid) return;
+  setSaving(true);
+  try {
+    let subId = submissionId;
+
+    if (!subId) {
+      const { data, error } = await supabase
+        .from("submissions")
+        .insert({ user_id: userId, matchday_id: matchdayId })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      subId = data.id;
+    }
+
+    const payload = {
+      outcome: outcome as "1" | "X" | "2",
+      home_score: Number(home),
+      away_score: Number(away),
+      edited_by_admin: true,
+      admin_edited_at: new Date().toISOString(),
+    };
+
+    const { data: existingPred, error: findError } = await supabase
+      .from("predictions")
+      .select("id")
+      .eq("submission_id", subId)
+      .eq("match_id", match.id)
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (existingPred) {
+      const { error } = await supabase
+        .from("predictions")
+        .update(payload)
+        .eq("id", existingPred.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("predictions")
+        .insert({
           submission_id: subId,
           match_id: match.id,
           ...payload,
         });
-        if (error) throw error;
-      }
-      toast.success("Pick saved");
-      onSaved();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save");
-    } finally {
-      setSaving(false);
+      if (error) throw error;
     }
-  };
+
+    toast.success("Pick saved");
+    onSaved();
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Could not save");
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <div className="rounded-md border border-border bg-background p-3">
