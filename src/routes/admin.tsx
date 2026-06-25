@@ -482,13 +482,17 @@ function PredictionEditor({
   const save = async () => {
   if (!valid) return;
   setSaving(true);
+
   try {
     let subId = submissionId;
 
     if (!subId) {
       const { data, error } = await supabase
         .from("submissions")
-        .insert({ user_id: userId, matchday_id: matchdayId })
+        .insert({
+          user_id: userId,
+          matchday_id: matchdayId,
+        })
         .select("id")
         .single();
 
@@ -518,15 +522,15 @@ function PredictionEditor({
         .from("predictions")
         .update(payload)
         .eq("id", existingPred.id);
+
       if (error) throw error;
     } else {
-      const { error } = await supabase
-        .from("predictions")
-        .insert({
-          submission_id: subId,
-          match_id: match.id,
-          ...payload,
-        });
+      const { error } = await supabase.from("predictions").insert({
+        submission_id: subId,
+        match_id: match.id,
+        ...payload,
+      });
+
       if (error) throw error;
     }
 
