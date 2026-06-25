@@ -8,7 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Download, Save, UserX, ShieldAlert, Pencil } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Trash2, Download, Save, UserX, ShieldAlert, Pencil, Users, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { AdminBadge } from "@/components/AdminBadge";
 
@@ -103,6 +110,7 @@ function AdminPage() {
       <UserPicksOverride />
       <TournamentOverride />
       <InactiveUsers />
+      <UserPredictionsSection />
     </AppShell>
   );
 }
@@ -744,6 +752,452 @@ function InactiveUsers() {
               </Button>
             </div>
           ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Tipi ────────────────────────────────────────────────────────────────────
+type UserProfile = { id: string; username: string };
+
+type PredRow = {
+  pred_id: string;
+  submission_id: string;
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  matchday_label: string;
+  kickoff_at: string;
+  outcome: "1" | "X" | "2";
+  home_score: number;
+  away_score: number;
+};
+
+type EditState = {
+  outcome: "1" | "X" | "2";
+  home_score: string;
+  away_score: string;
+};
+
+// ─── Componente principale ────────────────────────────────────────────────────
+function UserPredictionsSection() {
+  const qc = useQueryClient();
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [editMap, setEditMap] = useState<Record<string, EditState>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
+
+  // Lista tutti gli utenti
+  const { data: users } = useQuery<UserProfile[]>({
+    queryKey: ["admin-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .order("username");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Carica tutte le predictions dell'utente selezionato
+  const { data: rows, isLoading: loadingRows } = useQuery<PredRow[]>({
+    queryKey: ["admin-user-predictions", selectedUserId],
+    enabled: !!selectedUserId,
+    queryFn: async () => {
+      // 1. Trova tutte le submissions dell'utente
+      const { data: subs, error: e1 } = await supabase
+        .from("submissions")
+        .select("id, matchday_id")
+        .eq("user_id", selectedUserId);
+      if (e1) throw e1;
+      if (!subs?.length) return [];
+
+      const subIds = subs.map((s) => s.id);
+      const matchdayIds = [...new Set(subs.map((s) => s.matchday_id))];
+
+      // 2. Carica matchday labels
+      const { data: mds, error: e2 } = await supabase
+        .from("matchdays")
+        .select("id, label")
+        .in("id", matchdayIds);
+      if (e2) throw e2;
+      const mdMap = Object.fromEntries((mds ?? []).map((m) => [m.id, m.label]));
+
+      // 3. Carica predictions con match
+      const { data: preds, error: e3 } = await supabase
+        .from("predictions")
+        .select("id, submission_id, match_id, outcome, home_score, away_score")
+        .in("submission_id", subIds);
+      if (e3) throw e3;
+      if (!preds?.length) return [];
+
+      const matchIds = [...new Set(preds.map((p) => p.match_id))];
+
+      // 4. Carica matches
+      const { data: matches, error: e4 } = await supabase
+        .from("matches")
+        .select("id, home_team, away_team, kickoff_at, matchday_id")
+        .in("id", matchIds);
+      if (e4) throw e4;
+      const matchMap = Object.fromEntries(
+        (matches ?? []).map((m) => [m.id, m])
+      );
+
+      // 5. Assembla la sub→matchday map
+      const subMatchdayMap = Object.fromEntries(
+        subs.map((s) => [s.id, s.matchday_id])
+      );
+
+      return preds.map((p) => {
+        const match = matchMap[p.match_id];
+        const matchdayId = subMatchdayMap[p.submission_id];
+        return {
+          pred_id: p.id,
+          submission_id: p.submission_id,
+          match_id: p.match_id,
+          home_team: match?.home_team ?? "?",
+          away_team: match?.away_team ?? "?",
+          kickoff_at: match?.kickoff_at ?? "",
+          matchday_label: mdMap[matchdayId] ?? matchdayId,
+          outcome: p.outcome,
+          home_score: p.home_score,
+          away_score: p.away_score,
+        } as PredRow;
+      }).sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
+    },
+  });
+
+  // ── Helpers edit ──────────────────────────────────────────────────────────
+  const startEdit = (row: PredRow) => {
+    setEditMap((prev) => ({
+      ...prev,
+      [row.pred_id]: {
+        outcome: row.outcome,
+        home_score: String(row.home_score),
+        away_score: String(row.away_score),
+      },
+    }));
+  };
+
+  const cancelEdit = (predId: string) => {
+    setEditMap((prev) => {
+      const next = { ...prev };
+      delete next[predId];
+      return next;
+    });
+  };
+
+  // ── Save edit ─────────────────────────────────────────────────────────────
+  const saveEdit = async (predId: string) => {
+    const e = editMap[predId];
+    if (!e) return;
+    setSaving((s) => ({ ...s, [predId]: true }));
+    const { error } = await supabase
+      .from("predictions")
+      .update({
+        outcome: e.outcome,
+        home_score: Number(e.home_score),
+        away_score: Number(e.away_score),
+      })
+      .eq("id", predId);
+    setSaving((s) => ({ ...s, [predId]: false }));
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Prediction updated");
+      cancelEdit(predId);
+      qc.invalidateQueries({ queryKey: ["admin-user-predictions", selectedUserId] });
+    }
+  };
+
+  // ── Delete prediction ─────────────────────────────────────────────────────
+  const deletePrediction = async (row: PredRow) => {
+    if (!confirm(`Delete prediction for ${row.home_team} vs ${row.away_team}?`)) return;
+    setDeleting((d) => ({ ...d, [row.pred_id]: true }));
+
+    const { error } = await supabase
+      .from("predictions")
+      .delete()
+      .eq("id", row.pred_id);
+
+    setDeleting((d) => ({ ...d, [row.pred_id]: false }));
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Prediction deleted");
+
+    // Controlla se la submission è ora vuota → offri di cancellarla
+    const { data: remaining } = await supabase
+      .from("predictions")
+      .select("id")
+      .eq("submission_id", row.submission_id);
+
+    if (remaining?.length === 0) {
+      if (confirm("The submission is now empty. Delete it too?")) {
+        await supabase.from("submissions").delete().eq("id", row.submission_id);
+        toast.success("Empty submission deleted");
+      }
+    }
+
+    qc.invalidateQueries({ queryKey: ["admin-user-predictions", selectedUserId] });
+  };
+
+  // ── Delete submission intera ───────────────────────────────────────────────
+  const deleteSubmission = async (submissionId: string) => {
+    if (!confirm("Delete the entire submission and all its predictions?")) return;
+    // Prima cancella predictions (o usa cascade se già configurato nel DB)
+    await supabase.from("predictions").delete().eq("submission_id", submissionId);
+    const { error } = await supabase
+      .from("submissions")
+      .delete()
+      .eq("id", submissionId);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Submission deleted");
+      qc.invalidateQueries({ queryKey: ["admin-user-predictions", selectedUserId] });
+    }
+  };
+
+  // ── Raggruppamento per matchday ───────────────────────────────────────────
+  const grouped = useMemo(() => {
+    if (!rows) return [];
+    const map = new Map<string, { label: string; rows: PredRow[] }>();
+    for (const row of rows) {
+      if (!map.has(row.matchday_label)) {
+        map.set(row.matchday_label, { label: row.matchday_label, rows: [] });
+      }
+      map.get(row.matchday_label)!.rows.push(row);
+    }
+    return [...map.values()];
+  }, [rows]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <section className="space-y-4 rounded-xl border border-border bg-card p-6">
+      <div className="flex items-center gap-2">
+        <Users className="h-5 w-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">User Predictions Editor</h2>
+      </div>
+
+      {/* Dropdown utente */}
+      <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-1.5 w-64">
+          <Label htmlFor="user-select">Select user</Label>
+          <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+            <SelectTrigger id="user-select">
+              <SelectValue placeholder="Choose a user…" />
+            </SelectTrigger>
+            <SelectContent>
+              {(users ?? []).map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  @{u.username}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Contenuto */}
+      {!selectedUserId ? (
+        <p className="text-sm text-muted-foreground">
+          Select a user to see their predictions.
+        </p>
+      ) : loadingRows ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : grouped.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No predictions found.</p>
+      ) : (
+        <div className="space-y-6">
+          {grouped.map(({ label, rows: groupRows }) => {
+            // Raggruppa le submission per questo matchday
+            const subIds = [...new Set(groupRows.map((r) => r.submission_id))];
+
+            return (
+              <div key={label} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    {label}
+                  </h3>
+                  {subIds.length === 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive gap-1"
+                      onClick={() => deleteSubmission(subIds[0])}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete submission
+                    </Button>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Match</th>
+                        <th className="px-3 py-2 text-left font-medium">Kickoff</th>
+                        <th className="px-3 py-2 text-left font-medium">Outcome</th>
+                        <th className="px-3 py-2 text-left font-medium">Score</th>
+                        <th className="px-3 py-2 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {groupRows.map((row) => {
+                        const isEditing = !!editMap[row.pred_id];
+                        const ed = editMap[row.pred_id];
+                        const isSaving = !!saving[row.pred_id];
+                        const isDeleting = !!deleting[row.pred_id];
+
+                        return (
+                          <tr key={row.pred_id} className="hover:bg-muted/30 transition-colors">
+                            {/* Match */}
+                            <td className="px-3 py-2 font-medium">
+                              {row.home_team} vs {row.away_team}
+                            </td>
+
+                            {/* Kickoff */}
+                            <td className="px-3 py-2 text-muted-foreground text-xs">
+                              {new Date(row.kickoff_at).toLocaleString()}
+                            </td>
+
+                            {/* Outcome */}
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <div className="flex gap-1">
+                                  {(["1", "X", "2"] as const).map((o) => (
+                                    <button
+                                      key={o}
+                                      onClick={() =>
+                                        setEditMap((prev) => ({
+                                          ...prev,
+                                          [row.pred_id]: { ...ed, outcome: o },
+                                        }))
+                                      }
+                                      className={`h-7 w-8 rounded border text-xs font-medium transition-colors ${
+                                        ed.outcome === o
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-border bg-background hover:bg-secondary"
+                                      }`}
+                                    >
+                                      {o}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <Badge variant="outline">{row.outcome}</Badge>
+                              )}
+                            </td>
+
+                            {/* Score */}
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    className="h-7 w-12 text-center text-xs"
+                                    value={ed.home_score}
+                                    onChange={(e) =>
+                                      setEditMap((prev) => ({
+                                        ...prev,
+                                        [row.pred_id]: {
+                                          ...ed,
+                                          home_score: e.target.value.replace(/[^0-9]/g, "").slice(0, 2),
+                                        },
+                                      }))
+                                    }
+                                  />
+                                  <span className="text-muted-foreground">–</span>
+                                  <Input
+                                    className="h-7 w-12 text-center text-xs"
+                                    value={ed.away_score}
+                                    onChange={(e) =>
+                                      setEditMap((prev) => ({
+                                        ...prev,
+                                        [row.pred_id]: {
+                                          ...ed,
+                                          away_score: e.target.value.replace(/[^0-9]/g, "").slice(0, 2),
+                                        },
+                                      }))
+                                    }
+                                  />
+                                </div>
+                              ) : (
+                                <span className="tabular-nums">
+                                  {row.home_score} – {row.away_score}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-3 py-2">
+                              <div className="flex justify-end gap-1">
+                                {isEditing ? (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="h-7 px-2 text-xs"
+                                      disabled={isSaving}
+                                      onClick={() => saveEdit(row.pred_id)}
+                                    >
+                                      {isSaving ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Save className="h-3 w-3" />
+                                      )}
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => cancelEdit(row.pred_id)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => startEdit(row)}
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                      disabled={isDeleting}
+                                      onClick={() => deletePrediction(row)}
+                                    >
+                                      {isDeleting ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3 w-3" />
+                                      )}
+                                      Delete
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
