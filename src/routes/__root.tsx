@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { SceneBackground } from "@/components/SceneBackground";
 
 function NotFoundComponent() {
   return (
@@ -106,9 +107,15 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        />
         <HeadContent />
       </head>
-      <body>
+      <body className="dark">
         {children}
         <Scripts />
       </body>
@@ -121,8 +128,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <SceneBackground />
+      <div className="relative z-10 page-enter">
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </div>
       <Toaster richColors position="top-center" />
     </QueryClientProvider>
   );
