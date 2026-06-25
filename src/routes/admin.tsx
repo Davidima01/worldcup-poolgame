@@ -500,39 +500,24 @@ function PredictionEditor({
       subId = data.id;
     }
 
-    const payload = {
-      outcome: outcome as "1" | "X" | "2",
-      home_score: Number(home),
-      away_score: Number(away),
-      edited_by_admin: true,
-      admin_edited_at: new Date().toISOString(),
-    };
-
-    const { data: existingPred, error: findError } = await supabase
+    const { error } = await supabase
       .from("predictions")
-      .select("id")
-      .eq("submission_id", subId)
-      .eq("match_id", match.id)
-      .maybeSingle();
+      .upsert(
+        {
+          submission_id: subId,
+          match_id: match.id,
+          outcome: outcome as "1" | "X" | "2",
+          home_score: Number(home),
+          away_score: Number(away),
+          edited_by_admin: true,
+          admin_edited_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "submission_id,match_id",
+        },
+      );
 
-    if (findError) throw findError;
-
-    if (existingPred) {
-      const { error } = await supabase
-        .from("predictions")
-        .update(payload)
-        .eq("id", existingPred.id);
-
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from("predictions").insert({
-        submission_id: subId,
-        match_id: match.id,
-        ...payload,
-      });
-
-      if (error) throw error;
-    }
+    if (error) throw error;
 
     toast.success("Pick saved");
     onSaved();
