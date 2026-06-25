@@ -23,14 +23,32 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
+    <div className="min-h-screen">
+      <header
+        className="sticky top-0 z-30 border-b"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(10,46,26,0.85), rgba(10,46,26,0.55))",
+          backdropFilter: "blur(18px) saturate(140%)",
+          borderColor: "rgba(255,215,0,0.22)",
+        }}
+      >
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-          <Link to="/play" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+          <Link to="/play" className="flex items-center gap-2 font-bold tracking-tight">
+            <span
+              className="grid h-9 w-9 place-items-center rounded-xl"
+              style={{
+                background:
+                  "linear-gradient(135deg, #FFD700 0%, #d4af37 100%)",
+                color: "#0a2e1a",
+                boxShadow: "0 6px 20px -6px rgba(255,215,0,0.55)",
+              }}
+            >
               <Trophy className="h-4 w-4" />
             </span>
-            <span className="hidden sm:inline">Friends Pool</span>
+            <span className="hidden text-foreground sm:inline">
+              World Cup <span style={{ color: "#FFD700" }}>Pool</span>
+            </span>
           </Link>
           <nav className="flex items-center gap-1">
             {nav.map((n) => {
@@ -40,14 +58,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={n.to}
                   to={n.to}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    active
-                      ? "bg-secondary text-secondary-foreground"
-                      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-                  }`}
+                  className="relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors"
+                  style={{
+                    color: active ? "#FFD700" : "rgba(255,255,255,0.65)",
+                  }}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="hidden sm:inline">{n.label}</span>
+                  <span
+                    className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full transition-all duration-300"
+                    style={{
+                      background: "linear-gradient(90deg, transparent, #FFD700, transparent)",
+                      opacity: active ? 1 : 0,
+                      transform: active ? "scaleX(1)" : "scaleX(0.4)",
+                    }}
+                  />
                 </Link>
               );
             })}
@@ -56,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <ThemeToggle />
             {user && (
               <>
-                <span className="hidden text-sm text-muted-foreground sm:inline">
+                <span className="hidden text-sm sm:inline" style={{ color: "rgba(255,255,255,0.7)" }}>
                   @{user.username}
                 </span>
                 <Button
