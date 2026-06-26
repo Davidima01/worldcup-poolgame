@@ -233,11 +233,11 @@ function LeaderboardPage() {
             <BarChart3 className="h-6 w-6 text-primary" /> Leaderboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Points update automatically as results are entered.
+            Points update automatically as real results are entered.
           </p>
         </header>
 
-        <details className="rounded-xl border border-border bg-white/10 backdrop-blur-md p-4 text-sm">
+        <details className="rounded-xl border border-border bg-card/40 p-4 text-sm">
           <summary className="cursor-pointer font-medium">Scoring rules</summary>
           <ul className="mt-3 list-disc space-y-1 pl-5 text-muted-foreground">
             <li>+1 pt per exact score (home & away match the real result).</li>
@@ -255,7 +255,7 @@ function LeaderboardPage() {
             No players yet.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-border bg-white/15 backdrop-blur-md">
+          <div className="overflow-x-auto rounded-2xl border border-border bg-card/40">
             <div className="flex justify-end px-3 pt-3">
               <button
                 onClick={() => setShowDetails((v) => !v)}
@@ -292,7 +292,7 @@ function LeaderboardPage() {
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={r.id} className={`border-t border-border/60 ${r.id === user.id ? "bg-white/10" : ""}`}>
+                  <tr key={r.id} className={`border-t border-border/60 ${r.id === user.id ? "bg-primary/5" : ""}`}>
                     <td className="py-2.5 pl-3 font-mono text-muted-foreground sm:py-3 sm:pl-4">
                       {i === 0 ? <Trophy className="h-4 w-4 text-amber-500" /> :
                        i === 1 ? <Crown className="h-4 w-4 text-zinc-400" /> :
