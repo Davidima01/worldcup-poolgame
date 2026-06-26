@@ -275,10 +275,10 @@ function LeaderboardPage() {
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="py-3 pl-4">#</th>
-                  <th className="py-3 pr-2"></th>
-                  <th className="py-3 pr-4">Player</th>
-                  <th className="py-3 pr-4 text-right">Streak</th>
+                  <th className="py-3 pl-3 sm:pl-4">#</th>
+                  <th className="py-3 pr-1 sm:pr-2"></th>
+                  <th className="py-3 pr-3 sm:pr-4">Player</th>
+                  <th className="py-3 pr-3 text-right sm:pr-4">Streak</th>
                   {showDetails && (
                     <>
                       <th className="py-3 pr-4 text-right">Exact</th>
@@ -287,19 +287,19 @@ function LeaderboardPage() {
                       <th className="py-3 pr-4 text-right">Tournament</th>
                     </>
                   )}
-                  <th className="py-3 pr-4 text-right">Total</th>
+                  <th className="py-3 pr-3 text-right sm:pr-4">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={r.id} className={`border-t border-border/60 ${r.id === user.id ? "bg-primary/5" : ""}`}>
-                    <td className="py-3 pl-4 font-mono text-muted-foreground">
+                    <td className="py-2.5 pl-3 font-mono text-muted-foreground sm:py-3 sm:pl-4">
                       {i === 0 ? <Trophy className="h-4 w-4 text-amber-500" /> :
                        i === 1 ? <Crown className="h-4 w-4 text-zinc-400" /> :
                        i === 2 ? <Crown className="h-4 w-4 text-amber-700" /> :
                        i + 1}
                     </td>
-                    <td className="py-3 pr-2">
+                    <td className="py-2.5 pr-1 sm:py-3 sm:pr-2">
                       {!r.hasPrev ? (
                         <Minus className="h-4 w-4 text-muted-foreground/50" />
                       ) : r.delta > 0 ? (
@@ -316,8 +316,8 @@ function LeaderboardPage() {
                         <Minus className="h-4 w-4 text-muted-foreground/60" />
                       )}
                     </td>
-                    <td className="py-3 pr-4 font-medium">@{r.username}</td>
-                    <td className="py-3 pr-4 text-right tabular-nums">
+                    <td className="py-2.5 pr-3 font-medium sm:py-3 sm:pr-4">@{r.username}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums sm:py-3 sm:pr-4">
                       {r.streak > 0 ? (
                         <span className="inline-flex items-center gap-1">
                           {r.streak} <span aria-hidden>{r.streak >= 5 ? "⚡" : "🔥"}</span>
@@ -334,7 +334,7 @@ function LeaderboardPage() {
                         <td className="py-3 pr-4 text-right tabular-nums">{r.tournament.toFixed(1).replace(/\.0$/, "")}</td>
                       </>
                     )}
-                    <td className="py-3 pr-4 text-right text-base font-semibold tabular-nums">
+                    <td className="py-2.5 pr-3 text-right text-base font-semibold tabular-nums sm:py-3 sm:pr-4">
                       {r.total.toFixed(1).replace(/\.0$/, "")}
                     </td>
                   </tr>
