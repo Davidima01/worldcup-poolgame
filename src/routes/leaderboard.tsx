@@ -233,7 +233,7 @@ function LeaderboardPage() {
             <BarChart3 className="h-6 w-6 text-primary" /> Leaderboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Points update automatically as real results are entered.
+            Points update automatically as results are entered.
           </p>
         </header>
 
@@ -244,7 +244,7 @@ function LeaderboardPage() {
             <li>+1 pt per correct 1X2 outcome — boosted to <strong>1.5 pt</strong> if only 2 users got it right, <strong>2 pt</strong> if only 1.</li>
             <li>Champion: <strong>8 / 4 / 2</strong> pts for 1st / 2nd / 3rd; boosted to <strong>10 / 5 / 2.5</strong> if 2 users picked it and <strong>12 / 6 / 3</strong> if only 1.</li>
             <li>Top scorer: <strong>4 / 2</strong> pts for 1st / 2nd; boosted to <strong>5 / 2.5</strong> (2 users) and <strong>6 / 3</strong> (1 user).</li>
-            <li>Position arrows compare to standings before the latest scored matchday. 🔥 streak counts consecutive correct 1X2; 🔵🔥 at 5+.</li>
+            <li>Position arrows compare to standings before the latest scored matchday. 🔥 streak counts consecutive correct 1X2; ⚡ at 5+.</li>
           </ul>
         </details>
 
