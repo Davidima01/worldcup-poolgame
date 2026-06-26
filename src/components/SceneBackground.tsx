@@ -74,45 +74,33 @@ function ScrollVideo() {
     const video = videoRef.current;
     if (!video) return;
 
-    // Avvia il video "congelato": in play ma a velocità 0
-    // Questo forza il browser a decodificare e bufferare i frame in anticipo
-    const onReady = () => {
-      video.play().then(() => {
-        video.playbackRate = 0.0001; // quasi zero, non proprio 0 per compatibilità
-      }).catch(() => {});
-    };
-
-    let targetTime = 0;
-    let currentTime = 0;
     let rafId = 0;
+    let targetRate = 0;
+    let currentRate = 0;
+    let stopTimeout: ReturnType<typeof setTimeout>;
 
     const handleScroll = () => {
-      const scrollTop = window.scrollY;
-      const maxScroll = Math.max(1, document.body.scrollHeight - window.innerHeight);
-      const progress = Math.min(1, scrollTop / maxScroll);
-      targetTime = progress * (video.duration || 0);
+      targetRate = 1.5; // velocità durante lo scroll
+      clearTimeout(stopTimeout);
+      stopTimeout = setTimeout(() => {
+        targetRate = 0; // fermo dopo 80ms senza scroll
+      }, 80);
     };
 
-    // Loop lerp: avvicina currentTime a targetTime del 12% per frame
     const loop = () => {
-      if (video.duration) {
-        currentTime += (targetTime - currentTime) * 0.12;
-        // Applica solo se la differenza è significativa (evita micro-seek inutili)
-        if (Math.abs(video.currentTime - currentTime) > 0.01) {
-          video.currentTime = currentTime;
-        }
-      }
+      currentRate += (targetRate - currentRate) * 0.1;
+      video.playbackRate = Math.max(0.0001, currentRate); // 0 non è valido su tutti i browser
       rafId = requestAnimationFrame(loop);
     };
 
-    video.addEventListener("canplaythrough", onReady);
+    video.play().catch(() => {});
     window.addEventListener("scroll", handleScroll, { passive: true });
     rafId = requestAnimationFrame(loop);
 
     return () => {
-      video.removeEventListener("canplaythrough", onReady);
       window.removeEventListener("scroll", handleScroll);
       cancelAnimationFrame(rafId);
+      clearTimeout(stopTimeout);
     };
   }, []);
 
@@ -120,6 +108,7 @@ function ScrollVideo() {
     <video
       ref={videoRef}
       muted
+      loop
       playsInline
       preload="auto"
       style={{
