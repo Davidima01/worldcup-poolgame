@@ -69,7 +69,7 @@ function AdminPage() {
         Create matchdays, add matches, monitor submissions, export results.
       </p>
 
-      <section className="mb-8 rounded-xl border border-border bg-card p-5">
+      <section className="mb-8 rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           New matchday
         </h2>
@@ -216,7 +216,7 @@ function MatchdayAdminCard({ matchday }: { matchday: MD }) {
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5">
+    <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
@@ -396,7 +396,7 @@ function UserPicksOverride() {
   });
 
   return (
-    <section className="mt-10 rounded-xl border border-border bg-card p-5">
+    <section className="mt-10 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 text-amber-500" />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -577,7 +577,7 @@ function TournamentOverride() {
   });
 
   return (
-    <section className="mt-8 rounded-xl border border-border bg-card p-5">
+    <section className="mt-8 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 text-amber-500" />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -714,7 +714,7 @@ function InactiveUsers() {
   };
 
   return (
-    <section className="mt-8 rounded-xl border border-border bg-card p-5">
+    <section className="mt-8 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <UserX className="h-4 w-4 text-red-500" />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
