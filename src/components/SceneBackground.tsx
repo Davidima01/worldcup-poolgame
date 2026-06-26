@@ -25,7 +25,7 @@ export function SceneBackground() {
         <StaticImage src="https://images.unsplash.com/photo-1761446812468-d88eef0d01da?fm=jpg&q=80&w=2000&auto=format&fit=crop" />
       )}
       {scene === "leaderboard" && (
-        <StaticImage src="https://images.unsplash.com/photo-1461896836934-ffe607ba8211?fm=jpg&q=80&w=2000&auto=format&fit=crop" />
+        <StaticImage src="https://dtaseikeklfsknemnpus.supabase.co/storage/v1/object/public/Davide's%20Bucket/1782366765235.jpg" />
       )}
       {(scene === "play" || scene === "results" || scene === "history") && <ScrollVideo />}
       {/* dark overlay for readability */}
