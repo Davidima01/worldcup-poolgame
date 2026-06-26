@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           borderColor: "rgba(255,215,0,0.22)",
         }}
       >
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-4">
           <Link to="/play" className="flex items-center gap-2 font-bold tracking-tight">
             <span
               className="grid h-9 w-9 place-items-center rounded-xl"
@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               World Cup <span style={{ color: "#FFD700" }}>Pool</span>
             </span>
           </Link>
-          <nav className="flex items-center gap-1">
+          <nav className="flex flex-wrap items-center justify-center gap-0.5 sm:gap-1">
             {nav.map((n) => {
               const Icon = n.icon;
               const active = pathname.startsWith(n.to);
@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={n.to}
                   to={n.to}
-                  className="relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors"
+                  className="relative inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors sm:px-3"
                   style={{
                     color: active ? "#FFD700" : "rgba(255,255,255,0.65)",
                   }}
