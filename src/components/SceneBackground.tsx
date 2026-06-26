@@ -75,32 +75,48 @@ function ScrollVideo() {
     if (!video) return;
 
     let rafId = 0;
-    let targetRate = 0;
-    let currentRate = 0;
-    let stopTimeout: ReturnType<typeof setTimeout>;
+    let targetTime = 0;
+    let currentTime = 0;
+    let isReady = false;
+
+    const onReady = () => {
+      if (isReady) return;
+      isReady = true;
+      // Avvia e metti subito in pausa: forza il browser a bufferare i frame
+      video.play().then(() => {
+        video.pause();
+        video.currentTime = 0;
+        currentTime = 0;
+        targetTime = 0;
+      }).catch(() => {});
+    };
 
     const handleScroll = () => {
-      targetRate = 1.5; // velocità durante lo scroll
-      clearTimeout(stopTimeout);
-      stopTimeout = setTimeout(() => {
-        targetRate = 0; // fermo dopo 80ms senza scroll
-      }, 80);
+      if (!video.duration) return;
+      const scrollTop = window.scrollY;
+      const maxScroll = Math.max(1, document.body.scrollHeight - window.innerHeight);
+      const progress = Math.min(1, scrollTop / maxScroll);
+      targetTime = progress * video.duration;
     };
 
     const loop = () => {
-      currentRate += (targetRate - currentRate) * 0.1;
-      video.playbackRate = Math.max(0.0001, currentRate); // 0 non è valido su tutti i browser
+      if (isReady && video.duration) {
+        currentTime += (targetTime - currentTime) * 0.12;
+        if (Math.abs(video.currentTime - currentTime) > 0.01) {
+          video.currentTime = currentTime;
+        }
+      }
       rafId = requestAnimationFrame(loop);
     };
 
-    video.play().catch(() => {});
+    video.addEventListener("canplaythrough", onReady);
     window.addEventListener("scroll", handleScroll, { passive: true });
     rafId = requestAnimationFrame(loop);
 
     return () => {
+      video.removeEventListener("canplaythrough", onReady);
       window.removeEventListener("scroll", handleScroll);
       cancelAnimationFrame(rafId);
-      clearTimeout(stopTimeout);
     };
   }, []);
 
@@ -108,7 +124,6 @@ function ScrollVideo() {
     <video
       ref={videoRef}
       muted
-      loop
       playsInline
       preload="auto"
       style={{
