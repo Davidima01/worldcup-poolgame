@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { Clock, CheckCircle2, Loader2, ShieldAlert } from "lucide-react";
 
 export const Route = createFileRoute("/play")({
   head: () => ({ meta: [{ title: "Open Matchdays — Friends Pool" }] }),
@@ -25,7 +25,13 @@ type Match = {
 };
 
 type Matchday = { id: string; label: string; created_at: string };
-type OpenMatchday = { matchday: Matchday; matches: Match[]; nextKickoff: Date };
+type AdminLock = { outcome: "1" | "X" | "2"; home: number; away: number; at: string | null };
+type OpenMatchday = {
+  matchday: Matchday;
+  matches: Match[];
+  nextKickoff: Date;
+  adminLocks: Map<string, AdminLock>;
+};
 type Pick = { outcome: "1" | "X" | "2" | ""; home: string; away: string };
 
 function PlayPage() {
@@ -63,14 +69,26 @@ function PlayPage() {
         .eq("user_id", user!.id);
       if (e3) throw e3;
       const subIds = (subs ?? []).map((s) => s.id);
-      let predictedMatchIds = new Set<string>();
+      const userOwnedMatchIds = new Set<string>();
+      const adminLocks = new Map<string, AdminLock>();
       if (subIds.length) {
         const { data: preds, error: e4 } = await supabase
           .from("predictions")
-          .select("match_id")
+          .select("match_id,outcome,home_score,away_score,edited_by_admin,admin_edited_at")
           .in("submission_id", subIds);
         if (e4) throw e4;
-        predictedMatchIds = new Set((preds ?? []).map((p) => p.match_id));
+        for (const p of preds ?? []) {
+          if (p.edited_by_admin) {
+            adminLocks.set(p.match_id, {
+              outcome: p.outcome as "1" | "X" | "2",
+              home: p.home_score,
+              away: p.away_score,
+              at: p.admin_edited_at ?? null,
+            });
+          } else {
+            userOwnedMatchIds.add(p.match_id);
+          }
+        }
       }
 
       const now = Date.now();
@@ -79,12 +97,12 @@ function PlayPage() {
         const mm = (matches ?? []).filter(
           (x) =>
             x.matchday_id === md.id &&
-            !predictedMatchIds.has(x.id) &&
+            !userOwnedMatchIds.has(x.id) &&
             new Date(x.kickoff_at).getTime() > now,
         ) as Match[];
         if (mm.length === 0) continue;
         const next = new Date(mm[0].kickoff_at);
-        open.push({ matchday: md, matches: mm, nextKickoff: next });
+        open.push({ matchday: md, matches: mm, nextKickoff: next, adminLocks });
       }
       open.sort((a, b) => a.nextKickoff.getTime() - b.nextKickoff.getTime());
       return open;
@@ -131,7 +149,7 @@ function MatchdaySection({
   onSaved: () => void;
   userId: string;
 }) {
-  const { matchday, matches, nextKickoff } = openMd;
+  const { matchday, matches, nextKickoff, adminLocks } = openMd;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -165,6 +183,7 @@ function MatchdaySection({
             userId={userId}
             matchdayId={matchday.id}
             onSaved={onSaved}
+            adminLock={adminLocks.get(m.id)}
           />
         ))}
       </div>
@@ -178,18 +197,26 @@ function MatchCard({
   userId,
   matchdayId,
   onSaved,
+  adminLock,
 }: {
   match: Match;
   now: number;
   userId: string;
   matchdayId: string;
   onSaved: () => void;
+  adminLock?: AdminLock;
 }) {
-  const [pick, setPick] = useState<Pick>({ outcome: "", home: "", away: "" });
+  const [pick, setPick] = useState<Pick>(() =>
+    adminLock
+      ? { outcome: adminLock.outcome, home: String(adminLock.home), away: String(adminLock.away) }
+      : { outcome: "", home: "", away: "" },
+  );
   const [saving, setSaving] = useState(false);
   const k = new Date(match.kickoff_at);
   const closed = k.getTime() <= now;
   const complete = isComplete(pick);
+  const locked = !!adminLock;
+  const disabled = closed || saving || locked;
 
   const save = async () => {
     if (!complete) return;
@@ -226,27 +253,34 @@ function MatchCard({
   const countdown = useMemo(() => formatCountdown(k.getTime() - now), [k, now]);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+    <div className={`rounded-xl border bg-card p-3 shadow-sm sm:p-4 ${locked ? "border-amber-500/40" : "border-border"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-medium">
           {match.home_team} <span className="text-muted-foreground">vs</span> {match.away_team}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{k.toLocaleString()}</span>
-          {closed ? (
+          {locked ? (
+            <Badge
+              variant="outline"
+              className="border-amber-500/60 text-amber-500"
+            >
+              <ShieldAlert className="mr-1 h-3 w-3" /> Set by admin
+            </Badge>
+          ) : closed ? (
             <Badge variant="destructive">CLOSED</Badge>
           ) : (
             <span className="font-mono text-foreground">{countdown}</span>
           )}
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-4">
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
         <div className="flex gap-1">
           {(["1", "X", "2"] as const).map((o) => (
             <button
               key={o}
               type="button"
-              disabled={closed || saving}
+              disabled={disabled}
               onClick={() => setPick((p) => ({ ...p, outcome: o }))}
               className={`h-9 w-10 rounded-md border text-sm font-medium transition-colors ${
                 pick.outcome === o
@@ -264,7 +298,7 @@ function MatchCard({
             className="w-16 text-center"
             placeholder="0"
             value={pick.home}
-            disabled={closed || saving}
+            disabled={disabled}
             onChange={(e) =>
               setPick((p) => ({ ...p, home: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) }))
             }
@@ -275,28 +309,31 @@ function MatchCard({
             className="w-16 text-center"
             placeholder="0"
             value={pick.away}
-            disabled={closed || saving}
+            disabled={disabled}
             onChange={(e) =>
               setPick((p) => ({ ...p, away: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) }))
             }
           />
         </div>
-        <div className="ml-auto">
-          <Button
-            size="sm"
-            onClick={save}
-            disabled={closed || saving || !complete}
-          >
-            {saving ? (
-              <>
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              "Save"
-            )}
-          </Button>
-        </div>
+        {!locked && (
+          <div className="sm:ml-auto">
+            <Button
+              size="sm"
+              onClick={save}
+              disabled={closed || saving || !complete}
+              className="w-full sm:w-auto"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
