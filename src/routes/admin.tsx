@@ -551,7 +551,7 @@ function PredictionEditor({
         <span className="text-muted-foreground">–</span>
         <Input className="w-14 text-center" inputMode="numeric" value={away}
           onChange={(e) => setAway(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))} />
-        <Button size="sm" className="ml-auto" disabled={!valid || saving} onClick={save}>
+        <Button size="sm" className="w-full sm:ml-auto sm:w-auto" disabled={!valid || saving} onClick={save}>
           <Save className="mr-1 h-3.5 w-3.5" />
           {saving ? "Saving…" : existing ? "Update" : "Create"}
         </Button>
