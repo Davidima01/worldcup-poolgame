@@ -22,7 +22,7 @@ export function SceneBackground() {
       {scene === "login" && <LoginScene />}
       {scene === "tournament" && <TournamentScene />}
       {scene === "admin" && (
-        <StaticImage src="https://dtaseikeklfsknemnpus.supabase.co/storage/v1/object/public/DavidesBucket/1782366765235.jpg" />
+        <StaticImage src="https://dtaseikeklfsknemnpus.supabase.co/storage/v1/object/public/DavidesBucket/modern-luxury-office.jpg" />
       )}
       {scene === "leaderboard" && (
         <StaticImage src="https://dtaseikeklfsknemnpus.supabase.co/storage/v1/object/public/DavidesBucket/1782366765235.jpg?v=2" />
