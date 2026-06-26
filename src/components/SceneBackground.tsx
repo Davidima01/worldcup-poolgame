@@ -69,35 +69,53 @@ function StaticImage({ src }: { src: string }) {
 /* =================== SCROLL VIDEO =================== */
 function ScrollVideo() {
   const videoRef = useRef<HTMLVideoElement>(null);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    let ticking = false;
+
+    // Avvia il video "congelato": in play ma a velocità 0
+    // Questo forza il browser a decodificare e bufferare i frame in anticipo
+    const onReady = () => {
+      video.play().then(() => {
+        video.playbackRate = 0.0001; // quasi zero, non proprio 0 per compatibilità
+      }).catch(() => {});
+    };
+
+    let targetTime = 0;
+    let currentTime = 0;
+    let rafId = 0;
+
     const handleScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          if (!video.duration) {
-            ticking = false;
-            return;
-          }
-          const scrollTop = window.scrollY;
-          const maxScroll = Math.max(1, document.body.scrollHeight - window.innerHeight);
-          const progress = Math.min(1, scrollTop / maxScroll);
-          video.currentTime = progress * video.duration;
-          ticking = false;
-        });
-        ticking = true;
+      const scrollTop = window.scrollY;
+      const maxScroll = Math.max(1, document.body.scrollHeight - window.innerHeight);
+      const progress = Math.min(1, scrollTop / maxScroll);
+      targetTime = progress * (video.duration || 0);
+    };
+
+    // Loop lerp: avvicina currentTime a targetTime del 12% per frame
+    const loop = () => {
+      if (video.duration) {
+        currentTime += (targetTime - currentTime) * 0.12;
+        // Applica solo se la differenza è significativa (evita micro-seek inutili)
+        if (Math.abs(video.currentTime - currentTime) > 0.01) {
+          video.currentTime = currentTime;
+        }
       }
+      rafId = requestAnimationFrame(loop);
     };
-    const onLoaded = () => {
-      window.addEventListener("scroll", handleScroll, { passive: true });
-    };
-    video.addEventListener("loadedmetadata", onLoaded);
+
+    video.addEventListener("canplaythrough", onReady);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    rafId = requestAnimationFrame(loop);
+
     return () => {
-      video.removeEventListener("loadedmetadata", onLoaded);
+      video.removeEventListener("canplaythrough", onReady);
       window.removeEventListener("scroll", handleScroll);
+      cancelAnimationFrame(rafId);
     };
   }, []);
+
   return (
     <video
       ref={videoRef}
@@ -116,7 +134,6 @@ function ScrollVideo() {
     />
   );
 }
-
 /* =================== LOGIN =================== */
 function LoginScene() {
   return (
