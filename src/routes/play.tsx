@@ -157,7 +157,7 @@ function MatchdaySection({
   }, []);
 
   return (
-    <section className="rounded-2xl border border-border bg-card/40 p-5">
+    <section className="rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">{matchday.label}</h2>
@@ -253,7 +253,7 @@ function MatchCard({
   const countdown = useMemo(() => formatCountdown(k.getTime() - now), [k, now]);
 
   return (
-    <div className={`rounded-xl border bg-card p-3 shadow-sm sm:p-4 ${locked ? "border-amber-500/40" : "border-border"}`}>
+    <div className={`rounded-xl border backdrop-blur-lg p-3 shadow-sm sm:p-4 ${locked ? "border-amber-500/40 bg-black/40" : "border-white/10 bg-black/40"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-medium">
           {match.home_team} <span className="text-muted-foreground">vs</span> {match.away_team}
