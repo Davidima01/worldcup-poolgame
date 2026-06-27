@@ -73,57 +73,14 @@ function ScrollVideo() {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    let rafId = 0;
-    let targetTime = 0;
-    let currentTime = 0;
-    let isReady = false;
-
-    const onReady = () => {
-      if (isReady) return;
-      isReady = true;
-      // Avvia e metti subito in pausa: forza il browser a bufferare i frame
-      video.play().then(() => {
-        video.pause();
-        video.currentTime = 0;
-        currentTime = 0;
-        targetTime = 0;
-      }).catch(() => {});
-    };
-
-    const handleScroll = () => {
-      if (!video.duration) return;
-      const scrollTop = window.scrollY;
-      const maxScroll = Math.max(1, document.body.scrollHeight - window.innerHeight);
-      const progress = Math.min(1, scrollTop / maxScroll);
-      targetTime = progress * video.duration;
-    };
-
-    const loop = () => {
-      if (isReady && video.duration) {
-        currentTime += (targetTime - currentTime) * 0.12;
-        if (Math.abs(video.currentTime - currentTime) > 0.01) {
-          video.currentTime = currentTime;
-        }
-      }
-      rafId = requestAnimationFrame(loop);
-    };
-
-    video.addEventListener("canplaythrough", onReady);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    rafId = requestAnimationFrame(loop);
-
-    return () => {
-      video.removeEventListener("canplaythrough", onReady);
-      window.removeEventListener("scroll", handleScroll);
-      cancelAnimationFrame(rafId);
-    };
+    video.play().catch(() => {});
   }, []);
 
   return (
     <video
       ref={videoRef}
       muted
+      loop
       playsInline
       preload="auto"
       style={{
