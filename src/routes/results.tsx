@@ -84,7 +84,7 @@ function ResultsPage() {
           <Accordion type="multiple" className="space-y-3">
             <AccordionItem
               value="tournament"
-              className="overflow-hidden rounded-2xl border border-border bg-card/40"
+              className="overflow-hidden rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl"
             >
               <AccordionTrigger className="px-5 py-4 hover:no-underline">
                 <div className="flex items-center gap-2 text-base font-semibold">
@@ -181,7 +181,7 @@ function ResultRow({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="rounded-xl border border-white/10 bg-black/40 backdrop-blur-lg p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-medium">
           {match.home_team} <span className="text-muted-foreground">vs</span> {match.away_team}
