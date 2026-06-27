@@ -230,7 +230,7 @@ function LeaderboardPage() {
       <div className="space-y-6">
         <header>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <BarChart3 className="h-6 w-6 text-primary" /> Leaderboard
+            <BarChart3 className="h-6 w-6 text-primary" /> League Table
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Points update automatically as real results are entered.
