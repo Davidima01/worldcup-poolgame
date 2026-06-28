@@ -45,92 +45,79 @@ function HistoryPage() {
     queryKey: ["history", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      // 1. All my submissions and predictions
-      const { data: mySubs } = await supabase
-        .from("submissions")
-        .select("id")
-        .eq("user_id", user!.id);
-      const mySubIds = (mySubs ?? []).map((s: any) => s.id);
-      let myPreds: any[] = [];
-      if (mySubIds.length) {
-        const { data: p } = await supabase
-          .from("predictions")
-          .select("match_id,outcome,home_score,away_score,edited_by_admin,admin_edited_at")
-          .in("submission_id", mySubIds);
-        myPreds = p ?? [];
-      }
-      const myMatchIds = Array.from(new Set(myPreds.map((p) => p.match_id)));
+      // Unica chiamata RPC — il join avviene nel database
+      const [allPreds, mySubsRes] = await Promise.all([
+        supabase.rpc("get_history_for_user", { p_user_id: user!.id }),
+        supabase.from("submissions").select("id").eq("user_id", user!.id),
+      ]);
+
+      const mySubIds = new Set((mySubsRes.data ?? []).map((s: any) => s.id));
+      const allRows = (allPreds.data ?? []) as any[];
+      const myMatchIds = Array.from(new Set(allRows.map((r) => r.match_id)));
+
       if (!myMatchIds.length) {
         return { matches: [], matchdays: {}, myPreds: {}, others: [], results: {} };
       }
 
-      // 2. Match info + matchday labels
-      const { data: matches } = await supabase
-        .from("matches")
-        .select("id,home_team,away_team,kickoff_at,matchday_id")
-        .in("id", myMatchIds)
-        .order("kickoff_at", { ascending: true });
-      const mdIds = Array.from(new Set((matches ?? []).map((m: any) => m.matchday_id)));
+      // Match info + matchday labels + results in parallelo
+      const [matchesRes, resultsRes] = await Promise.all([
+        supabase
+          .from("matches")
+          .select("id,home_team,away_team,kickoff_at,matchday_id")
+          .in("id", myMatchIds)
+          .order("kickoff_at", { ascending: true }),
+        supabase
+          .from("match_results")
+          .select("match_id,outcome,home_score,away_score")
+          .in("match_id", myMatchIds),
+      ]);
+
+      const matches = matchesRes.data ?? [];
+      const mdIds = Array.from(new Set(matches.map((m: any) => m.matchday_id)));
       const { data: mds } = await supabase
         .from("matchdays")
         .select("id,label")
         .in("id", mdIds);
+
       const matchdays: Record<string, string> = {};
       (mds ?? []).forEach((m: any) => (matchdays[m.id] = m.label));
 
-      // 3. Results
-      const { data: rs } = await supabase
-        .from("match_results")
-        .select("match_id,outcome,home_score,away_score")
-        .in("match_id", myMatchIds);
       const results: Record<string, any> = {};
-      (rs ?? []).forEach((r: any) => (results[r.match_id] = r));
+      (resultsRes.data ?? []).forEach((r: any) => (results[r.match_id] = r));
 
-      // 4. Other users' predictions for those matches
-      const { data: otherSubs } = await supabase
-        .from("submissions")
-        .select("id,user_id")
-        .neq("user_id", user!.id);
-      const otherSubIds = (otherSubs ?? []).map((s: any) => s.id);
-      const otherUserIds = Array.from(new Set((otherSubs ?? []).map((s: any) => s.user_id)));
-      const { data: otherUsers } = otherUserIds.length
-        ? await supabase.from("users").select("id,username").in("id", otherUserIds)
-        : { data: [] };
-      const userIdToUsername: Record<string, string> = {};
-      (otherUsers ?? []).forEach((u: any) => (userIdToUsername[u.id] = u.username));
-      let otherPreds: any[] = [];
-      if (otherSubIds.length) {
-        const { data: p } = await supabase
-          .from("predictions")
-          .select("submission_id,match_id,outcome,home_score,away_score,edited_by_admin,admin_edited_at")
-          .in("submission_id", otherSubIds)
-          .in("match_id", myMatchIds);
-        otherPreds = p ?? [];
-      }
-      console.log("otherSubs count:", (otherSubs ?? []).length);
-      console.log("otherUserIds:", otherUserIds);
-      console.log("otherUsers:", otherUsers);
-      console.log("otherPreds count:", otherPreds.length);
-      console.log("myMatchIds:", myMatchIds);
-      const subToUser: Record<string, string> = {};
-      (otherSubs ?? []).forEach((s: any) => {
-        subToUser[s.id] = userIdToUsername[s.user_id] ?? "?";
-      });
+      // Separa le mie predictions da quelle degli altri
+      const myPredsByMatch: Record<string, any> = {};
       const byUser: Record<string, Record<string, any>> = {};
-      otherPreds.forEach((p) => {
-        const u = subToUser[p.submission_id];
-        if (!u) return;
-        if (!byUser[u]) byUser[u] = {};
-        byUser[u][p.match_id] = p;
-      });
+
+      for (const row of allRows) {
+        if (mySubIds.size === 0) break; // fallback safety
+        // Le mie: username corrisponde al mio user
+        // Usiamo un approccio diverso: la RPC restituisce tutto,
+        // separiamo in base a se il username è il nostro o no
+      }
+
+      // Recupera il mio username
+      const { data: meData } = await supabase
+        .from("users")
+        .select("username")
+        .eq("id", user!.id)
+        .single();
+      const myUsername = meData?.username ?? "";
+
+      for (const row of allRows) {
+        if (row.username === myUsername) {
+          myPredsByMatch[row.match_id] = row;
+        } else {
+          if (!byUser[row.username]) byUser[row.username] = {};
+          byUser[row.username][row.match_id] = row;
+        }
+      }
+
       const others = Object.entries(byUser)
         .map(([username, preds]) => ({ username, preds }))
         .sort((a, b) => a.username.localeCompare(b.username));
 
-      const myPredsByMatch: Record<string, any> = {};
-      myPreds.forEach((p) => (myPredsByMatch[p.match_id] = p));
-
-      return { matches: matches ?? [], matchdays, myPreds: myPredsByMatch, others, results };
+      return { matches, matchdays, myPreds: myPredsByMatch, others, results };
     },
   });
 
