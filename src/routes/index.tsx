@@ -26,7 +26,7 @@ function Index() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (getSession()) navigate({ to: "/play" });
+    if (getSession()) navigate({ to: "/live" });
   }, [navigate]);
 
   const submit = async (e: React.FormEvent) => {
@@ -34,7 +34,7 @@ function Index() {
     setLoading(true);
     try {
       await loginOrCreate(username);
-      navigate({ to: "/play" });
+      navigate({ to: "/live" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not continue");
     } finally {
