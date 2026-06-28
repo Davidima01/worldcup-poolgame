@@ -12,8 +12,7 @@ export const Route = createFileRoute("/live")({
 });
 
 // ─── API ────────────────────────────────────────────────────────────────────
-const API_KEY = "a1f1e0b51ce623580370c313f8309213";
-const API_BASE = "https://v3.football.api-sports.io";
+const PROXY_BASE = "https://dtaseikeklfsknemnpus.supabase.co/functions/v1/football-proxy";
 const LEAGUE = 1;
 const SEASON = 2026;
 const POLL_MS = 6 * 60 * 1000; // 6 minuti
@@ -90,67 +89,68 @@ function saveStatsCache(stats: FixtureStats) {
 // ─── FETCH API-FOOTBALL ──────────────────────────────────────────────────────
 async function fetchAllFixtures(): Promise<FixtureSummary[]> {
   const res = await fetch(
-    `${API_BASE}/fixtures?league=${LEAGUE}&season=${SEASON}`,
-    { headers: { "x-apisports-key": API_KEY } }
+    `${PROXY_BASE}?path=/fixtures&league=${LEAGUE}&season=${SEASON}`
   );
   const json = await res.json();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (json.response ?? []).map((f: any): FixtureSummary => ({
-    id: f.fixture.id,
-    date: f.fixture.date,
-    round: f.league.round,
-    statusShort: f.fixture.status.short,
-    statusElapsed: f.fixture.status.elapsed,
-    homeTeam: f.teams.home.name,
-    homeLogo: f.teams.home.logo,
-    awayTeam: f.teams.away.name,
-    awayLogo: f.teams.away.logo,
-    homeGoals: f.goals.home,
-    awayGoals: f.goals.away,
+    id: f.id,
+    date: f.date,
+    round: f.round ?? f.league?.round ?? "Unknown",
+    statusShort: f.statusShort ?? f.status?.short ?? "NS",
+    statusElapsed: f.statusElapsed ?? f.status?.elapsed ?? null,
+    homeTeam: f.homeTeam?.name ?? f.teams?.home?.name ?? "",
+    homeLogo: f.homeTeam?.logo ?? f.teams?.home?.logo ?? "",
+    awayTeam: f.awayTeam?.name ?? f.teams?.away?.name ?? "",
+    awayLogo: f.awayTeam?.logo ?? f.teams?.away?.logo ?? "",
+    homeGoals: f.homeTeam?.goals ?? f.goals?.home ?? null,
+    awayGoals: f.awayTeam?.goals ?? f.goals?.away ?? null,
   }));
 }
 
 async function findLiveFixtureId(): Promise<number | null> {
   const res = await fetch(
-    `${API_BASE}/fixtures?live=all&league=${LEAGUE}`,
-    { headers: { "x-apisports-key": API_KEY } }
+    `${PROXY_BASE}?path=/fixtures&live=all&league=${LEAGUE}`
   );
   const json = await res.json();
   if (!json.response?.length) return null;
-  return json.response[0].fixture.id;
+  // KickoffAPI restituisce id direttamente sul fixture
+  return json.response[0].id ?? json.response[0].fixture?.id ?? null;
 }
 
 async function fetchFixtureStats(fixtureId: number): Promise<FixtureStats> {
   const res = await fetch(
-    `${API_BASE}/fixtures?id=${fixtureId}`,
-    { headers: { "x-apisports-key": API_KEY } }
+    `${PROXY_BASE}?path=/fixtures&id=${fixtureId}`
   );
   const json = await res.json();
   console.log("[LIVE] risposta fetchFixtureStats:", json);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const f = json.response?.[0];
   if (!f) throw new Error("No fixture data");
 
-  // Statistiche: array [{team, statistics: [{type, value}]}]
+  // Supporta sia struttura KickoffAPI che API-Football
+  const statusShort = f.statusShort ?? f.fixture?.status?.short ?? "NS";
+  const statusElapsed = f.statusElapsed ?? f.fixture?.status?.elapsed ?? null;
+  const homeGoals = f.homeTeam?.goals ?? f.goals?.home ?? null;
+  const awayGoals = f.awayTeam?.goals ?? f.goals?.away ?? null;
+
   const statsRaw: { home: Record<string, string | number | null>; away: Record<string, string | number | null> } = {
     home: {},
     away: {},
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
+  // Statistiche: array [{team, statistics: [{type, value}]}]
   (f.statistics ?? []).forEach((teamStat: any, idx: number) => {
     const side = idx === 0 ? "home" : "away";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    teamStat.statistics.forEach((s: any) => {
+    (teamStat.statistics ?? []).forEach((s: any) => {
       statsRaw[side][s.type] = s.value;
     });
   });
 
   return {
     fixtureId,
-    statusShort: f.fixture.status.short,
-    statusElapsed: f.fixture.status.elapsed,
-    homeGoals: f.goals.home,
-    awayGoals: f.goals.away,
+    statusShort,
+    statusElapsed,
+    homeGoals,
+    awayGoals,
     stats: statsRaw,
     fetchedAt: Date.now(),
   };
@@ -159,8 +159,7 @@ async function fetchFixtureStats(fixtureId: number): Promise<FixtureStats> {
 async function fetchOdds(fixtureId: number): Promise<{ home: string; draw: string; away: string } | null> {
   try {
     const res = await fetch(
-      `${API_BASE}/odds?fixture=${fixtureId}&bet=1`,
-      { headers: { "x-apisports-key": API_KEY } }
+      `${PROXY_BASE}?path=/odds&fixture=${fixtureId}`
     );
     const json = await res.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
