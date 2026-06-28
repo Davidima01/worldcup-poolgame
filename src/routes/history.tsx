@@ -89,9 +89,15 @@ function HistoryPage() {
       // 4. Other users' predictions for those matches
       const { data: otherSubs } = await supabase
         .from("submissions")
-        .select("id,user_id,users(username)")
+        .select("id,user_id")
         .neq("user_id", user!.id);
       const otherSubIds = (otherSubs ?? []).map((s: any) => s.id);
+      const otherUserIds = Array.from(new Set((otherSubs ?? []).map((s: any) => s.user_id)));
+      const { data: otherUsers } = otherUserIds.length
+        ? await supabase.from("users").select("id,username").in("id", otherUserIds)
+        : { data: [] };
+      const userIdToUsername: Record<string, string> = {};
+      (otherUsers ?? []).forEach((u: any) => (userIdToUsername[u.id] = u.username));
       let otherPreds: any[] = [];
       if (otherSubIds.length) {
         const { data: p } = await supabase
@@ -103,7 +109,7 @@ function HistoryPage() {
       }
       const subToUser: Record<string, string> = {};
       (otherSubs ?? []).forEach((s: any) => {
-        subToUser[s.id] = s.users?.username ?? "?";
+        subToUser[s.id] = userIdToUsername[s.user_id] ?? "?";
       });
       const byUser: Record<string, Record<string, any>> = {};
       otherPreds.forEach((p) => {
