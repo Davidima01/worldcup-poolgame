@@ -417,6 +417,7 @@ function LivePage() {
     }
     fetchAllFixtures()
       .then((data) => {
+        console.log("[LIVE] fixtures caricati:", data.length, data[0]);
         saveFixturesCache(data);
         setFixtures(data);
       })
