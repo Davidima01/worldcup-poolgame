@@ -249,7 +249,7 @@ function LeaderboardPage() {
         <details className="rounded-xl border border-border bg-card/40 p-4 text-sm">
           <summary className="cursor-pointer font-medium">Scoring rules</summary>
           <ul className="mt-3 list-disc space-y-1 pl-5 text-muted-foreground">
-            <li>+1 pt per exact score (home &amp; away match the real result) — from 28 Jun 2026 (21:00): +0.5 bonus over 3.5 goals, +1 bonus over 4.5, +1.5 bonus over 5.5.</li>
+            <li>+1 pt per exact score (home &amp; away match the real result) — from Round of 32: +0.5 bonus over 3.5 goals, +1 bonus over 4.5, +1.5 bonus over 5.5.</li>
             <li>+1 pt per correct 1X2 outcome — boosted to <strong>1.5 pt</strong> if only 2 users got it right, <strong>2 pt</strong> if only 1.</li>
             <li>Champion: <strong>8 / 4 / 2</strong> pts for 1st / 2nd / 3rd; boosted to <strong>10 / 5 / 2.5</strong> if 2 users picked it and <strong>12 / 6 / 3</strong> if only 1.</li>
             <li>Top scorer: <strong>4 / 2</strong> pts for 1st / 2nd; boosted to <strong>5 / 2.5</strong> (2 users) and <strong>6 / 3</strong> (1 user).</li>
