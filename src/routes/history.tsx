@@ -150,7 +150,7 @@ function HistoryPage() {
     <AppShell>
       <h1 className="mb-1 text-2xl font-semibold tracking-tight">Your history</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Compact view: check yours and other users' picks.
+        Compact view: check yours and other users' predictions.
       </p>
       {isLoading ? (
         <div className="text-muted-foreground">Loading…</div>
