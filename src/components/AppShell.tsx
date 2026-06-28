@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Trophy, History, ShieldCheck, LogOut, Crown, ClipboardCheck, BarChart3, Moon, Sun } from "lucide-react";
+import { Trophy, History, ShieldCheck, LogOut, Crown, ClipboardCheck, BarChart3, Moon, Sun, Tv2 } from "lucide-react";
 import { useSession, setSession, isAdmin } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
@@ -13,6 +13,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!ready) return null;
 
   const nav = [
+    { to: "/live", label: "Live", icon: Tv2 },
     { to: "/play", label: "Matchday", icon: Trophy },
     { to: "/tournament", label: "Tournament", icon: Crown },
     { to: "/results", label: "Results", icon: ClipboardCheck },
@@ -63,7 +64,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                     color: active ? "#FFD700" : "rgba(255,255,255,0.65)",
                   }}
                 >
-                  <Icon className="h-4 w-4" />
+                  <span className="relative">
+                    <Icon className="h-4 w-4" />
+                    {n.to === "/live" && (
+                      <span
+                        className="absolute -right-1 -top-1 h-2 w-2 rounded-full"
+                        style={{
+                          background: "#ef4444",
+                          boxShadow: "0 0 6px 2px rgba(239,68,68,0.7)",
+                          animation: "pulse 1.5s ease-in-out infinite",
+                        }}
+                      />
+                    )}
+                  </span>
                   <span className="hidden sm:inline">{n.label}</span>
                   <span
                     className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full transition-all duration-300"
