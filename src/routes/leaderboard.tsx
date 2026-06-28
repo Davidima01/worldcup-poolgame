@@ -32,11 +32,14 @@ type TRes = {
   top_scorer_2nd: string | null;
 } | null;
 
+const BONUS_FROM = new Date("2026-06-28T19:00:00Z");
+
 function computeScores(
   userIds: string[],
   subUser: Map<string, string>,
   preds: PredRow[],
   matchActuals: Map<string, MatchRes>,
+  matchInfo: Map<string, { id: string; matchday_id: string; kickoff_at: string }>,
   tpreds: TPred[],
   tres: TRes,
 ) {
@@ -68,7 +71,13 @@ function computeScores(
         b.outcomeBonus += pts - 1;
       }
       if (p.home_score === actual.home_score && p.away_score === actual.away_score) {
-        b.exactScores += 1;
+        const matchDate = new Date(matchInfo.get(p.match_id)?.kickoff_at ?? 0);
+        const totalGoals = actual.home_score + actual.away_score;
+        const exactBonus =
+          matchDate >= BONUS_FROM && totalGoals > 5 ? 1.5 :
+          matchDate >= BONUS_FROM && totalGoals > 4 ? 1 :
+          matchDate >= BONUS_FROM && totalGoals > 3 ? 0.5 : 0;
+        b.exactScores += 1 + exactBonus;
       }
     }
   }
@@ -158,7 +167,7 @@ function LeaderboardPage() {
     const matchActual = new Map(data.matchRes.map((r) => [r.match_id, r]));
     const matchInfo = new Map(data.matches.map((m) => [m.id, m]));
 
-    const scores = computeScores(userIds, subUser, data.preds, matchActual, data.tpreds, data.tres);
+    const scores = computeScores(userIds, subUser, data.preds, matchActual, matchInfo, data.tpreds, data.tres);
     const currentRank = rankMap(scores, userIds, usernames);
 
     // Previous standings: exclude the most recent matchday that has results
@@ -181,7 +190,7 @@ function LeaderboardPage() {
     }
     const prevActuals = new Map<string, MatchRes>();
     for (const [mid, r] of matchActual) if (!excludedMatchIds.has(mid)) prevActuals.set(mid, r);
-    const prevScores = computeScores(userIds, subUser, data.preds, prevActuals, data.tpreds, data.tres);
+    const prevScores = computeScores(userIds, subUser, data.preds, prevActuals, matchInfo, data.tpreds, data.tres);
     const prevRank = rankMap(prevScores, userIds, usernames);
     const hasPrev = latestMdId !== null;
 
@@ -240,7 +249,7 @@ function LeaderboardPage() {
         <details className="rounded-xl border border-border bg-card/40 p-4 text-sm">
           <summary className="cursor-pointer font-medium">Scoring rules</summary>
           <ul className="mt-3 list-disc space-y-1 pl-5 text-muted-foreground">
-            <li>+1 pt per exact score (home & away match the real result).</li>
+            <li>+1 pt per exact score (home &amp; away match the real result) — from 28 Jun 2026 (21:00): +0.5 bonus over 3.5 goals, +1 bonus over 4.5, +1.5 bonus over 5.5.</li>
             <li>+1 pt per correct 1X2 outcome — boosted to <strong>1.5 pt</strong> if only 2 users got it right, <strong>2 pt</strong> if only 1.</li>
             <li>Champion: <strong>8 / 4 / 2</strong> pts for 1st / 2nd / 3rd; boosted to <strong>10 / 5 / 2.5</strong> if 2 users picked it and <strong>12 / 6 / 3</strong> if only 1.</li>
             <li>Top scorer: <strong>4 / 2</strong> pts for 1st / 2nd; boosted to <strong>5 / 2.5</strong> (2 users) and <strong>6 / 3</strong> (1 user).</li>
