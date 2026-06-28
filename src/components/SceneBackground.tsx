@@ -27,7 +27,7 @@ export function SceneBackground() {
       {scene === "leaderboard" && (
         <StaticImage src="https://dtaseikeklfsknemnpus.supabase.co/storage/v1/object/public/DavidesBucket/1782366765235.jpg?v=2" />
       )}
-      {(scene === "play" || scene === "results" || scene === "history") && <ScrollVideo />}
+      {(scene === "play" || scene === "results" || scene === "history" || scene == "live") && <ScrollVideo />}
       {/* dark overlay for readability */}
       <div
         className="absolute inset-0"
@@ -44,6 +44,7 @@ function routeToScene(path: string) {
   if (path.startsWith("/results")) return "results";
   if (path.startsWith("/leaderboard")) return "leaderboard";
   if (path.startsWith("/history")) return "history";
+  if (path.startsWith("/live")) return "live";
   if (path.startsWith("/admin")) return "admin";
   return "login";
 }
