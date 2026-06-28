@@ -95,15 +95,15 @@ async function fetchAllFixtures(): Promise<FixtureSummary[]> {
   return (json.response ?? []).map((f: any): FixtureSummary => ({
     id: f.id,
     date: f.date,
-    round: f.round ?? f.league?.round ?? "Unknown",
-    statusShort: f.statusShort ?? f.status?.short ?? "NS",
-    statusElapsed: f.statusElapsed ?? f.status?.elapsed ?? null,
-    homeTeam: f.homeTeam?.name ?? f.teams?.home?.name ?? "",
-    homeLogo: f.homeTeam?.logo ?? f.teams?.home?.logo ?? "",
-    awayTeam: f.awayTeam?.name ?? f.teams?.away?.name ?? "",
-    awayLogo: f.awayTeam?.logo ?? f.teams?.away?.logo ?? "",
-    homeGoals: f.homeTeam?.goals ?? f.goals?.home ?? null,
-    awayGoals: f.awayTeam?.goals ?? f.goals?.away ?? null,
+    round: f.round ?? "Group Stage",
+    statusShort: f.statusShort ?? "NS",
+    statusElapsed: f.elapsed ?? null,
+    homeTeam: f.homeTeam?.name ?? "",
+    homeLogo: f.homeTeam?.logo ?? "",
+    awayTeam: f.awayTeam?.name ?? "",
+    awayLogo: f.awayTeam?.logo ?? "",
+    homeGoals: f.goalsHome ?? null,
+    awayGoals: f.goalsAway ?? null,
   }));
 }
 
@@ -114,7 +114,7 @@ async function findLiveFixtureId(): Promise<number | null> {
   const json = await res.json();
   if (!json.response?.length) return null;
   // KickoffAPI restituisce id direttamente sul fixture
-  return json.response[0].id ?? json.response[0].fixture?.id ?? null;
+  return json.response[0].id ?? null;
 }
 
 async function fetchFixtureStats(fixtureId: number): Promise<FixtureStats> {
@@ -127,10 +127,10 @@ async function fetchFixtureStats(fixtureId: number): Promise<FixtureStats> {
   if (!f) throw new Error("No fixture data");
 
   // Supporta sia struttura KickoffAPI che API-Football
-  const statusShort = f.statusShort ?? f.fixture?.status?.short ?? "NS";
-  const statusElapsed = f.statusElapsed ?? f.fixture?.status?.elapsed ?? null;
-  const homeGoals = f.homeTeam?.goals ?? f.goals?.home ?? null;
-  const awayGoals = f.awayTeam?.goals ?? f.goals?.away ?? null;
+  const statusShort = f.statusShort ?? "NS";
+  const statusElapsed = f.elapsed ?? null;
+  const homeGoals = f.goalsHome ?? null;
+  const awayGoals = f.goalsAway ?? null;
 
   const statsRaw: { home: Record<string, string | number | null>; away: Record<string, string | number | null> } = {
     home: {},
