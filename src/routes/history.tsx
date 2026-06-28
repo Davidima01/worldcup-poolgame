@@ -107,6 +107,11 @@ function HistoryPage() {
           .in("match_id", myMatchIds);
         otherPreds = p ?? [];
       }
+      console.log("otherSubs count:", (otherSubs ?? []).length);
+      console.log("otherUserIds:", otherUserIds);
+      console.log("otherUsers:", otherUsers);
+      console.log("otherPreds count:", otherPreds.length);
+      console.log("myMatchIds:", myMatchIds);
       const subToUser: Record<string, string> = {};
       (otherSubs ?? []).forEach((s: any) => {
         subToUser[s.id] = userIdToUsername[s.user_id] ?? "?";
