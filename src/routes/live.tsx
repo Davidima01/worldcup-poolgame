@@ -471,11 +471,16 @@ function LivePage() {
 
     const next = upcoming[0];
     const delayMs = Math.max(0, next.kickoffMs + KICKOFF_DELAY_MS - now);
+    console.log("[LIVE] Partita trovata:", next, "delayMs:", delayMs);
 
     kickoffTimerRef.current = setTimeout(async () => {
-      // Prima chiamata: trova il fixture_id
+      console.log("[LIVE] Timer scattato, cerco fixture live...");
       const id = await findLiveFixtureId();
-      if (!id) return;
+      console.log("[LIVE] fixture_id trovato:", id);
+      if (!id) {
+        console.log("[LIVE] Nessuna partita live trovata dall'API");
+        return;
+      }
       setLiveFixtureId(id);
 
       // Primo poll immediato
