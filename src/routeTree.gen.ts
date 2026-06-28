@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TournamentRouteImport } from './routes/tournament'
 import { Route as ResultsRouteImport } from './routes/results'
 import { Route as PlayRouteImport } from './routes/play'
+import { Route as LiveRouteImport } from './routes/live'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -30,6 +31,11 @@ const ResultsRoute = ResultsRouteImport.update({
 const PlayRoute = PlayRouteImport.update({
   id: '/play',
   path: '/play',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/history': typeof HistoryRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/play': typeof PlayRoute
   '/results': typeof ResultsRoute
   '/tournament': typeof TournamentRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/history': typeof HistoryRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/play': typeof PlayRoute
   '/results': typeof ResultsRoute
   '/tournament': typeof TournamentRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/history': typeof HistoryRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/play': typeof PlayRoute
   '/results': typeof ResultsRoute
   '/tournament': typeof TournamentRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/history'
     | '/leaderboard'
+    | '/live'
     | '/play'
     | '/results'
     | '/tournament'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/history'
     | '/leaderboard'
+    | '/live'
     | '/play'
     | '/results'
     | '/tournament'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/history'
     | '/leaderboard'
+    | '/live'
     | '/play'
     | '/results'
     | '/tournament'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   HistoryRoute: typeof HistoryRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LiveRoute: typeof LiveRoute
   PlayRoute: typeof PlayRoute
   ResultsRoute: typeof ResultsRoute
   TournamentRoute: typeof TournamentRoute
@@ -142,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/play'
       fullPath: '/play'
       preLoaderRoute: typeof PlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaderboard': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   HistoryRoute: HistoryRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LiveRoute: LiveRoute,
   PlayRoute: PlayRoute,
   ResultsRoute: ResultsRoute,
   TournamentRoute: TournamentRoute,
