@@ -126,6 +126,7 @@ async function fetchFixtureStats(fixtureId: number): Promise<FixtureStats> {
     { headers: { "x-apisports-key": API_KEY } }
   );
   const json = await res.json();
+  console.log("[LIVE] risposta fetchFixtureStats:", json);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const f = json.response?.[0];
   if (!f) throw new Error("No fixture data");
@@ -433,7 +434,9 @@ function LivePage() {
 
   async function doPoll(fixtureId: number) {
     try {
+      console.log("[LIVE] doPoll chiamato per fixtureId:", fixtureId);
       const stats = await fetchFixtureStats(fixtureId);
+      console.log("[LIVE] stats ricevute:", stats);
       setLiveStats(stats);
       setLiveFixtureOverride({
         id: fixtureId,
