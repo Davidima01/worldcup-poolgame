@@ -428,6 +428,8 @@ function LivePage() {
   const [liveStats, setLiveStats] = useState<FixtureStats | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const kickoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pastOpen, setPastOpen] = useState(false);
+  const [futureOpen, setFutureOpen] = useState(true);
 
   // Aggiorna anche il summary nella lista fixtures con score live
   const [liveFixtureOverride, setLiveFixtureOverride] = useState<Partial<FixtureSummary> | null>(null);
@@ -507,15 +509,41 @@ function LivePage() {
     return f;
   });
 
-  // Raggruppa per round
-  const grouped = groupByRound(mergedFixtures);
-  const rounds = Array.from(grouped.keys());
+  const now = Date.now();
+
+  // Separa live, future e passate
+  const liveFixtures = mergedFixtures.filter((f) => LIVE_STATUSES.includes(f.statusShort));
+  const futureFixtures = mergedFixtures
+    .filter((f) => !LIVE_STATUSES.includes(f.statusShort) && !FINISHED_STATUSES.includes(f.statusShort))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const pastFixtures = mergedFixtures
+    .filter((f) => FINISHED_STATUSES.includes(f.statusShort))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  
 
   if (!ready || !user) return null;
 
+  function renderCard(f: FixtureSummary) {
+    return (
+      <FixtureCard
+        key={f.id}
+        fixture={f}
+        liveStats={liveFixtureId === f.id ? liveStats : null}
+        supabaseKickoff={
+          supabaseMatches?.find((m) => {
+            const d1 = new Date(m.kickoff_at).getTime();
+            const d2 = new Date(f.date).getTime();
+            return Math.abs(d1 - d2) < 10 * 60 * 1000;
+          })?.kickoff_at ?? null
+        }
+      />
+    );
+  }
+
   return (
     <AppShell>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <header>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-white">
             <Tv2 className="h-6 w-6" style={{ color: "#FFD700" }} />
@@ -534,31 +562,66 @@ function LivePage() {
             No fixtures available.
           </div>
         ) : (
-          <div className="space-y-6">
-            {rounds.map((round) => (
-              <section key={round}>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest"
-                  style={{ color: "rgba(255,215,0,0.7)" }}>
-                  {round}
+          <div className="space-y-4">
+
+            {/* LIVE */}
+            {liveFixtures.length > 0 && (
+              <section className="space-y-2">
+                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest"
+                  style={{ color: "#ef4444" }}>
+                  <span className="h-2 w-2 rounded-full bg-red-500" style={{ animation: "pulse 1.5s ease-in-out infinite" }} />
+                  Live now
                 </h2>
-                <div className="space-y-2">
-                  {(grouped.get(round) ?? []).map((f) => (
-                    <FixtureCard
-                      key={f.id}
-                      fixture={f}
-                      liveStats={liveFixtureId === f.id ? liveStats : null}
-                      supabaseKickoff={
-                        supabaseMatches?.find((m) => {
-                          const d1 = new Date(m.kickoff_at).getTime();
-                          const d2 = new Date(f.date).getTime();
-                          return Math.abs(d1 - d2) < 10 * 60 * 1000;
-                        })?.kickoff_at ?? null
-                      }
-                    />
-                  ))}
-                </div>
+                {liveFixtures.map(renderCard)}
               </section>
-            ))}
+            )}
+
+            {/* FUTURE — pannello espandibile */}
+            {futureFixtures.length > 0 && (
+              <section>
+                <button
+                  onClick={() => setFutureOpen((v) => !v)}
+                  className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors hover:bg-white/5"
+                  style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)" }}
+                >
+                  <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(255,215,0,0.8)" }}>
+                    Upcoming — {futureFixtures.length} matches
+                  </span>
+                  {futureOpen
+                    ? <ChevronUp className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />
+                    : <ChevronDown className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />}
+                </button>
+                {futureOpen && (
+                  <div className="mt-2 space-y-2">
+                    {futureFixtures.map(renderCard)}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* PAST — pannello espandibile, chiuso di default */}
+            {pastFixtures.length > 0 && (
+              <section>
+                <button
+                  onClick={() => setPastOpen((v) => !v)}
+                  className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors hover:bg-white/5"
+                  style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)" }}
+                >
+                  <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.5)" }}>
+                    Results — {pastFixtures.length} matches
+                  </span>
+                  {pastOpen
+                    ? <ChevronUp className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />
+                    : <ChevronDown className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />}
+                </button>
+                {pastOpen && (
+                  <div className="mt-2 space-y-2">
+                    {pastFixtures.map(renderCard)}
+                  </div>
+                )}
+              </section>
+            )}
+
           </div>
         )}
       </div>
