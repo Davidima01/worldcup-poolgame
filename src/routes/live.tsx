@@ -103,34 +103,31 @@ async function apiFetchFixtures(): Promise<Match[]> {
   const json = await res.json();
   if (json.error) throw new Error(`Fixtures: ${json.error}`);
   if (!Array.isArray(json.response) || json.response.length === 0)
-    throw new Error("Nessuna partita ricevuta da API-Football.");
+    throw new Error("Nessuna partita ricevuta da KickoffAPI.");
 
   return (json.response as any[]).map((item): Match => {
-    const f      = item.fixture;
-    const teams  = item.teams;
-    const goals  = item.goals;
-    const league = item.league;
-    const short: string = f.status?.short ?? "NS";
-    const kickoff = new Date(f.date);
+    // KickoffAPI: struttura flat, tutto al primo livello
+    const short: string = item.statusShort ?? "NS";
+    const kickoff = new Date(item.date);
 
     let status: "live" | "future" | "finished";
-    if (isLive(short))         status = "live";
+    if (isLive(short))          status = "live";
     else if (isFinished(short)) status = "finished";
     else                        status = "future";
 
     return {
-      id: f.id,
-      homeTeam: teams.home.name,
-      homeLogo: teams.home.logo ?? "",
-      awayTeam: teams.away.name,
-      awayLogo: teams.away.logo ?? "",
-      date: f.date,
+      id: item.id,
+      homeTeam: item.homeTeam?.name ?? "",
+      homeLogo: item.homeTeam?.logo ?? "",
+      awayTeam: item.awayTeam?.name ?? "",
+      awayLogo: item.awayTeam?.logo ?? "",
+      date: item.date,
       time: kickoff.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
-      round: league.round ?? "Group Stage",
+      round: item.round ?? "Group Stage",
       status,
       statusShort: short,
       score: (status === "finished" || status === "live")
-        ? { home: goals.home ?? 0, away: goals.away ?? 0 }
+        ? { home: item.goalsHome ?? 0, away: item.goalsAway ?? 0 }
         : undefined,
     };
   });
