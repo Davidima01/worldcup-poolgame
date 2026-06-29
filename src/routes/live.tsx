@@ -1,396 +1,346 @@
+// src/routes/live.tsx
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useSession } from "@/lib/session";
-import { Tv2, ChevronDown, ChevronUp } from "lucide-react";
+import { Tv2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
   head: () => ({ meta: [{ title: "Live — Friends Pool" }] }),
   component: LivePage,
 });
 
-// ─── API ────────────────────────────────────────────────────────────────────
-const PROXY_BASE = "https://dtaseikeklfsknemnpus.supabase.co/functions/v1/football-proxy";
-const LEAGUE = 1;
-const SEASON = 2026;
-const POLL_MS = 6 * 60 * 1000; // 6 minuti
-const KICKOFF_DELAY_MS = 60 * 1000; // 1 minuto dopo kickoff
+// ─── EDGE FUNCTION ────────────────────────────────────────────────────────────
+const PROXY = "https://dtaseikeklfsknemnpus.supabase.co/functions/v1/live-proxy";
 
-// Status che indicano partita terminata
-const FINISHED_STATUSES = ["FT", "AET", "PEN"];
-// Status che indicano partita in corso
-const LIVE_STATUSES = ["1H", "2H", "HT", "ET", "BT", "P", "INT", "LIVE"];
+// ─── TIMING (localStorage) ────────────────────────────────────────────────────
+const FIXTURES_TTL = 30 * 60 * 1000;       // 30 minuti
+const ODDS_TTL     = 24 * 60 * 60 * 1000;  // 24 ore
 
-// ─── TIPI ───────────────────────────────────────────────────────────────────
-type FixtureSummary = {
+// ─── LOCALSTORAGE KEYS ────────────────────────────────────────────────────────
+const LS_FIX    = "wc2026_fixtures";
+const LS_FIX_TS = "wc2026_fixtures_ts";
+const LS_ODDS    = "wc2026_odds";
+const LS_ODDS_TS = "wc2026_odds_ts";
+
+// ─── STATUS ───────────────────────────────────────────────────────────────────
+const LIVE_ST     = ["1H", "2H", "HT", "ET", "BT", "P", "INT", "LIVE"] as const;
+const FINISHED_ST = ["FT", "AET", "PEN"] as const;
+
+const isLive     = (s: string) => (LIVE_ST as readonly string[]).includes(s);
+const isFinished = (s: string) => (FINISHED_ST as readonly string[]).includes(s);
+
+// ─── TYPES ────────────────────────────────────────────────────────────────────
+interface Odds {
+  matchId: number;
+  bet1: number;
+  betX: number;
+  bet2: number;
+  bookmaker?: string;
+}
+
+interface Match {
   id: number;
-  date: string; // ISO
-  round: string;
-  statusShort: string;
-  statusElapsed: number | null;
   homeTeam: string;
   homeLogo: string;
   awayTeam: string;
   awayLogo: string;
-  homeGoals: number | null;
-  awayGoals: number | null;
-};
-
-type FixtureStats = {
-  fixtureId: number;
+  date: string;
+  time: string;
+  round: string;
+  status: "live" | "future" | "finished";
   statusShort: string;
-  statusElapsed: number | null;
-  homeGoals: number | null;
-  awayGoals: number | null;
-  stats: {
-    home: Record<string, string | number | null>;
-    away: Record<string, string | number | null>;
-  };
-  fetchedAt: number; // Date.now()
-};
+  score?: { home: number; away: number };
+  odds?: Odds;
+}
 
-// ─── CACHE LOCALE ────────────────────────────────────────────────────────────
-const LS_FIXTURES = "wc2026_fixtures";
-const LS_FIXTURES_TS = "wc2026_last_fetch";
-const LS_STATS_PREFIX = "wc2026_stats_";
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const LS_LAST_POLL = "wc2026_last_poll";
+interface OddsEvent {
+  id: string;
+  home_team: string;
+  away_team: string;
+  bookmakers: {
+    title: string;
+    markets: {
+      key: string;
+      outcomes: { name: string; price: number }[];
+    }[];
+  }[];
+}
 
-// ─── POLLING GLOBALE (sopravvive ai re-render) ──────────────────────────────
-let globalPollInterval: ReturnType<typeof setInterval> | null = null;
-let globalLiveFixtureId: number | null = null;
-const pollEventTarget = new EventTarget();
-
-function loadFixturesCache(): FixtureSummary[] | null {
+// ─── CACHE ────────────────────────────────────────────────────────────────────
+function readCache<T>(key: string, tsKey: string, ttl: number): T | null {
   try {
-    const ts = localStorage.getItem(LS_FIXTURES_TS);
-    if (!ts || Date.now() - Number(ts) > ONE_DAY_MS) return null;
-    const raw = localStorage.getItem(LS_FIXTURES);
-    return raw ? JSON.parse(raw) : null;
+    const ts = localStorage.getItem(tsKey);
+    if (!ts || Date.now() - Number(ts) > ttl) return null;
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch { return null; }
 }
 
-function saveFixturesCache(fixtures: FixtureSummary[]) {
+function writeCache(key: string, tsKey: string, data: unknown): void {
   try {
-    localStorage.setItem(LS_FIXTURES, JSON.stringify(fixtures));
-    localStorage.setItem(LS_FIXTURES_TS, String(Date.now()));
+    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(tsKey, String(Date.now()));
   } catch {}
 }
 
-function loadStatsCache(fixtureId: number): FixtureStats | null {
-  try {
-    const raw = localStorage.getItem(`${LS_STATS_PREFIX}${fixtureId}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+// ─── TEAM NAME MATCH ──────────────────────────────────────────────────────────
+function norm(n: string): string {
+  return n.toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ").trim();
+}
+function teamsMatch(a: string, b: string): boolean {
+  const na = norm(a), nb = norm(b);
+  return na === nb || na.includes(nb) || nb.includes(na);
 }
 
-function saveStatsCache(stats: FixtureStats) {
-  try {
-    localStorage.setItem(`${LS_STATS_PREFIX}${stats.fixtureId}`, JSON.stringify(stats));
-  } catch {}
-}
-
-// ─── FETCH API-FOOTBALL ──────────────────────────────────────────────────────
-async function fetchAllFixtures(): Promise<FixtureSummary[]> {
-  const res = await fetch(
-    `${PROXY_BASE}?path=/fixtures&league=${LEAGUE}&season=${SEASON}`
-  );
+// ─── API CALLS ────────────────────────────────────────────────────────────────
+async function apiFetchFixtures(): Promise<Match[]> {
+  const res = await fetch(`${PROXY}?source=fixtures`);
+  if (!res.ok) throw new Error(`Fixtures: HTTP ${res.status}`);
   const json = await res.json();
-  return (json.response ?? []).map((f: any): FixtureSummary => {
-    const cached = loadStatsCache(f.id);
-    const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
-    const cacheIsStale =
-      cached &&
-      LIVE_STATUSES.includes(cached.statusShort) &&
-      new Date(f.date).getTime() < threeHoursAgo;
-    const useCache = cached && !cacheIsStale;
-    if (cacheIsStale) localStorage.removeItem(`${LS_STATS_PREFIX}${f.id}`);
+  if (json.error) throw new Error(`Fixtures: ${json.error}`);
+  if (!Array.isArray(json.response) || json.response.length === 0)
+    throw new Error("Nessuna partita ricevuta da API-Football.");
+
+  return (json.response as any[]).map((item): Match => {
+    const f      = item.fixture;
+    const teams  = item.teams;
+    const goals  = item.goals;
+    const league = item.league;
+    const short: string = f.status?.short ?? "NS";
+    const kickoff = new Date(f.date);
+
+    let status: "live" | "future" | "finished";
+    if (isLive(short))         status = "live";
+    else if (isFinished(short)) status = "finished";
+    else                        status = "future";
+
     return {
       id: f.id,
+      homeTeam: teams.home.name,
+      homeLogo: teams.home.logo ?? "",
+      awayTeam: teams.away.name,
+      awayLogo: teams.away.logo ?? "",
       date: f.date,
-      round: f.round ?? "Group Stage",
-      statusShort: useCache ? cached!.statusShort : (f.statusShort ?? "NS"),
-      statusElapsed: useCache ? cached!.statusElapsed : (f.elapsed ?? null),
-      homeTeam: f.homeTeam?.name ?? "",
-      homeLogo: f.homeTeam?.logo ?? "",
-      awayTeam: f.awayTeam?.name ?? "",
-      awayLogo: f.awayTeam?.logo ?? "",
-      homeGoals: cached?.homeGoals ?? f.goalsHome ?? null,
-      awayGoals: cached?.awayGoals ?? f.goalsAway ?? null,
+      time: kickoff.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+      round: league.round ?? "Group Stage",
+      status,
+      statusShort: short,
+      score: (status === "finished" || status === "live")
+        ? { home: goals.home ?? 0, away: goals.away ?? 0 }
+        : undefined,
     };
   });
 }
 
-async function findLiveFixtureId(): Promise<number | null> {
-  const res = await fetch(
-    `${PROXY_BASE}?path=/fixtures&live=all&league=${LEAGUE}`
-  );
+async function apiFetchOdds(): Promise<OddsEvent[]> {
+  const res = await fetch(`${PROXY}?source=odds`);
+  if (!res.ok) throw new Error(`Odds: HTTP ${res.status}`);
   const json = await res.json();
-  if (!json.response?.length) return null;
-  // KickoffAPI restituisce id direttamente sul fixture
-  return json.response[0].id ?? null;
+  if (json.error) throw new Error(`Odds: ${json.error}`);
+  return Array.isArray(json) ? json : [];
 }
 
-async function fetchFixtureStats(fixtureId: number): Promise<FixtureStats> {
-  const res = await fetch(
-    `${PROXY_BASE}?path=/fixtures&id=${fixtureId}`
-  );
-  const json = await res.json();
-  console.log("[LIVE] risposta fetchFixtureStats:", json);
-  const f = json.response?.[0];
-  if (!f) throw new Error("No fixture data");
-
-  // Supporta sia struttura KickoffAPI che API-Football
-  const statusShort = f.statusShort ?? "NS";
-  const statusElapsed = f.elapsed ?? null;
-  const homeGoals = f.goalsHome ?? null;
-  const awayGoals = f.goalsAway ?? null;
-
-  const statsRaw: { home: Record<string, string | number | null>; away: Record<string, string | number | null> } = {
-    home: {},
-    away: {},
-  };
-
-  // Statistiche: array [{team, statistics: [{type, value}]}]
-  (f.statistics ?? []).forEach((teamStat: any, idx: number) => {
-    const side = idx === 0 ? "home" : "away";
-    (teamStat.statistics ?? []).forEach((s: any) => {
-      statsRaw[side][s.type] = s.value;
-    });
-  });
-
-  return {
-    fixtureId,
-    statusShort,
-    statusElapsed,
-    homeGoals,
-    awayGoals,
-    stats: statsRaw,
-    fetchedAt: Date.now(),
-  };
-}
-
-async function fetchOdds(fixtureId: number): Promise<{ home: string; draw: string; away: string } | null> {
-  try {
-    const res = await fetch(
-      `${PROXY_BASE}?path=/odds&fixture=${fixtureId}`
+function mergeOdds(matches: Match[], events: OddsEvent[]): Match[] {
+  return matches.map((m) => {
+    if (m.status === "finished") return m;
+    const ev = events.find((e) =>
+      (teamsMatch(e.home_team, m.homeTeam) && teamsMatch(e.away_team, m.awayTeam)) ||
+      (teamsMatch(e.home_team, m.awayTeam) && teamsMatch(e.away_team, m.homeTeam))
     );
-    const json = await res.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bookmaker = json.response?.[0]?.bookmakers?.[0];
-    if (!bookmaker) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const values: any[] = bookmaker.bets?.[0]?.values ?? [];
+    if (!ev) return m;
+    const bm  = ev.bookmakers[0];
+    if (!bm)  return m;
+    const mkt = bm.markets.find((x) => x.key === "h2h");
+    if (!mkt) return m;
+    const home = mkt.outcomes.find((o) => teamsMatch(o.name, m.homeTeam));
+    const draw = mkt.outcomes.find((o) => o.name.toLowerCase() === "draw");
+    const away = mkt.outcomes.find((o) => teamsMatch(o.name, m.awayTeam));
+    if (!home || !draw || !away) return m;
     return {
-      home: values.find((v) => v.value === "Home")?.odd ?? "-",
-      draw: values.find((v) => v.value === "Draw")?.odd ?? "-",
-      away: values.find((v) => v.value === "Away")?.odd ?? "-",
+      ...m,
+      odds: {
+        matchId: m.id,
+        bet1: home.price,
+        betX: draw.price,
+        bet2: away.price,
+        bookmaker: bm.title,
+      },
     };
-  } catch { return null; }
-}
-
-// ─── HELPERS ────────────────────────────────────────────────────────────────
-function groupByRound(fixtures: FixtureSummary[]): Map<string, FixtureSummary[]> {
-  const map = new Map<string, FixtureSummary[]>();
-  for (const f of fixtures) {
-    const arr = map.get(f.round) ?? [];
-    arr.push(f);
-    map.set(f.round, arr);
-  }
-  return map;
-}
-
-function formatKickoff(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleString("it-IT", {
-    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
 
-function StatusBadge({ status, elapsed }: { status: string; elapsed: number | null }) {
-  if (LIVE_STATUSES.includes(status)) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
-        style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)" }}>
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500" style={{ animation: "pulse 1.5s ease-in-out infinite" }} />
-        {status === "HT" ? "HT" : `${elapsed ?? "?"}'`}
-      </span>
-    );
-  }
-  if (FINISHED_STATUSES.includes(status)) {
-    return (
-      <span className="rounded-full px-2 py-0.5 text-xs font-semibold"
-        style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
-        {status}
-      </span>
-    );
-  }
-  return null;
+// ─── UI HELPERS ───────────────────────────────────────────────────────────────
+function fmtDay(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("it-IT", {
+    weekday: "short", day: "numeric", month: "short",
+  });
 }
 
-function StatRow({ label, home, away }: { label: string; home: string | number | null; away: string | number | null }) {
-  const h = home ?? 0;
-  const a = away ?? 0;
-  const total = Number(h) + Number(a);
-  const homePct = total > 0 ? (Number(h) / total) * 100 : 50;
+// ─── COMPONENTS ───────────────────────────────────────────────────────────────
+function LiveBadge() {
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs" style={{ color: "rgba(255,255,255,0.7)" }}>
-        <span className="font-medium">{h}</span>
-        <span style={{ color: "rgba(255,255,255,0.45)" }}>{label}</span>
-        <span className="font-medium">{a}</span>
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider"
+      style={{
+        background: "rgba(239,68,68,0.15)",
+        color: "#ef4444",
+        border: "1px solid rgba(239,68,68,0.4)",
+      }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+      LIVE
+    </span>
+  );
+}
+
+function TeamDisplay({
+  name, logo, align,
+}: {
+  name: string; logo: string; align: "left" | "right";
+}) {
+  return (
+    <div className={`flex flex-1 items-center gap-2 ${align === "right" ? "flex-row-reverse" : ""}`}>
+      {logo && (
+        <img
+          src={logo}
+          alt={name}
+          className="h-7 w-7 object-contain shrink-0"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
+      )}
+      <span className="text-sm font-semibold text-white leading-tight">{name}</span>
+    </div>
+  );
+}
+
+// Partita LIVE — badge + squadre + orario + quote inline (niente score, niente stats)
+function LiveMatchCard({ match }: { match: Match }) {
+  return (
+    <div
+      className="rounded-2xl border px-5 py-4"
+      style={{
+        borderColor: "rgba(239,68,68,0.35)",
+        background: "rgba(0,0,0,0.5)",
+        backdropFilter: "blur(20px)",
+        boxShadow: "0 0 30px rgba(239,68,68,0.08)",
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <span
+          className="text-xs font-medium uppercase tracking-widest"
+          style={{ color: "rgba(255,255,255,0.4)" }}
+        >
+          {match.round}
+        </span>
+        <LiveBadge />
       </div>
-      <div className="flex h-1.5 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.1)" }}>
-        <div className="rounded-full transition-all duration-500"
-          style={{ width: `${homePct}%`, background: "linear-gradient(90deg, #FFD700, #d4af37)" }} />
+
+      <div className="flex items-center gap-3">
+        <TeamDisplay name={match.homeTeam} logo={match.homeLogo} align="left" />
+
+        <div className="flex min-w-[72px] flex-col items-center gap-1">
+          <span
+            className="text-base font-semibold tabular-nums"
+            style={{ color: "rgba(255,255,255,0.65)" }}
+          >
+            {match.time}
+          </span>
+          {match.odds && (
+            <div className="flex gap-1 text-[10px]" style={{ color: "rgba(255,215,0,0.75)" }}>
+              <span>{match.odds.bet1.toFixed(2)}</span>
+              <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+              <span>{match.odds.betX.toFixed(2)}</span>
+              <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+              <span>{match.odds.bet2.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+
+        <TeamDisplay name={match.awayTeam} logo={match.awayLogo} align="right" />
       </div>
     </div>
   );
 }
 
-// ─── COMPONENTE CARD PARTITA ─────────────────────────────────────────────────
-function FixtureCard({
-  fixture,
-  liveStats,
-  supabaseKickoff,
-}: {
-  fixture: FixtureSummary;
-  liveStats: FixtureStats | null;
-  supabaseKickoff: string | null;
-}) {
+// Partita FUTURA — espandibile per le quote
+function FutureMatchCard({ match }: { match: Match }) {
   const [open, setOpen] = useState(false);
-  const [odds, setOdds] = useState<{ home: string; draw: string; away: string } | null>(null);
-  const [loadingOdds, setLoadingOdds] = useState(false);
-
-  const isLive = LIVE_STATUSES.includes(fixture.statusShort);
-  const isFinished = FINISHED_STATUSES.includes(fixture.statusShort);
-  const isFuture = !isLive && !isFinished;
-
-  // Stats da usare: se live usa liveStats, se finished controlla cache
-  const cachedStats = isFinished ? loadStatsCache(fixture.id) : null;
-  const stats = liveStats ?? cachedStats;
-
-  const displayHome = stats?.homeGoals ?? fixture.homeGoals;
-  const displayAway = stats?.awayGoals ?? fixture.awayGoals;
-
-  async function handleOpen() {
-    if (isFuture) {
-      if (!open && !odds) {
-        setLoadingOdds(true);
-        const o = await fetchOdds(fixture.id);
-        setOdds(o);
-        setLoadingOdds(false);
-      }
-      setOpen((v) => !v);
-      return;
-    }
-    if (isFinished || isLive) setOpen((v) => !v);
-  }
-
-  const canOpen = isLive || isFinished || isFuture;
 
   return (
-    <div className="overflow-hidden rounded-xl border transition-all duration-200"
-      style={{ borderColor: isLive ? "rgba(239,68,68,0.4)" : "rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(16px)" }}>
-      {/* Header card */}
+    <div
+      className="overflow-hidden rounded-xl border"
+      style={{
+        borderColor: "rgba(255,255,255,0.08)",
+        background: "rgba(0,0,0,0.35)",
+        backdropFilter: "blur(14px)",
+      }}
+    >
       <button
-        onClick={handleOpen}
-        disabled={!canOpen}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
+        onClick={() => match.odds && setOpen((v) => !v)}
+        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+          match.odds ? "hover:bg-white/5 cursor-pointer" : "cursor-default"
+        }`}
       >
-        {/* Home */}
-        <div className="flex flex-1 items-center justify-end gap-2">
-          <span className="text-sm font-medium text-white">{fixture.homeTeam}</span>
-          <img src={fixture.homeLogo} alt="" className="h-6 w-6 object-contain" />
+        <TeamDisplay name={match.homeTeam} logo={match.homeLogo} align="left" />
+
+        <div className="flex min-w-[90px] flex-col items-center gap-0.5">
+          <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>
+            {fmtDay(match.date)}
+          </span>
+          <span className="text-sm font-bold tabular-nums text-white">
+            {match.time}
+          </span>
         </div>
 
-        {/* Score / orario */}
-        <div className="flex min-w-[80px] flex-col items-center gap-0.5">
-          {isLive || isFinished ? (
-            <span className="text-xl font-bold tabular-nums text-white">
-              {displayHome ?? 0} – {displayAway ?? 0}
-            </span>
-          ) : (
-            <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
-              {formatKickoff(fixture.date)}
-            </span>
-          )}
-          <StatusBadge status={fixture.statusShort} elapsed={stats?.statusElapsed ?? fixture.statusElapsed} />
-        </div>
+        <TeamDisplay name={match.awayTeam} logo={match.awayLogo} align="right" />
 
-        {/* Away */}
-        <div className="flex flex-1 items-center gap-2">
-          <img src={fixture.awayLogo} alt="" className="h-6 w-6 object-contain" />
-          <span className="text-sm font-medium text-white">{fixture.awayTeam}</span>
-        </div>
-
-        {/* Chevron */}
-        <span style={{ color: "rgba(255,255,255,0.35)" }}>
-          {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </span>
+        {match.odds ? (
+          open
+            ? <ChevronUp  className="h-4 w-4 shrink-0" style={{ color: "rgba(255,255,255,0.3)" }} />
+            : <ChevronDown className="h-4 w-4 shrink-0" style={{ color: "rgba(255,255,255,0.3)" }} />
+        ) : (
+          <span className="w-4 shrink-0" />
+        )}
       </button>
 
-      {/* Pannello espanso */}
-      {open && (
-        <div className="border-t px-4 py-4" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-          {/* Partita futura → quote */}
-          {isFuture && (
-            <div className="space-y-2">
-              {loadingOdds && <p className="text-center text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>Loading odds…</p>}
-              {!loadingOdds && !odds && <p className="text-center text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>No odds available.</p>}
-              {odds && (
-                <div className="flex justify-around">
-                  {[
-                    { label: "1", value: odds.home },
-                    { label: "X", value: odds.draw },
-                    { label: "2", value: odds.away },
-                  ].map((o) => (
-                    <div key={o.label} className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-semibold" style={{ color: "#FFD700" }}>{o.label}</span>
-                      <span className="rounded-lg px-3 py-1 text-sm font-bold text-white"
-                        style={{ background: "rgba(255,255,255,0.08)" }}>{o.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Partita live o finita → statistiche */}
-          {(isLive || isFinished) && (
-            <div className="space-y-3">
-              {!stats ? (
-                <p className="text-center text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
-                  {isLive ? "Loading stats…" : "No stats available."}
-                </p>
-              ) : (
-                <>
-                  {/* Intestazione squadre */}
-                  <div className="flex justify-between pb-1 text-xs font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>
-                    <span>{fixture.homeTeam}</span>
-                    <span>{fixture.awayTeam}</span>
-                  </div>
-                  {[
-                    "Ball Possession",
-                    "Total Shots",
-                    "Shots on Goal",
-                    "Expected Goals",
-                    "Corner Kicks",
-                    "Fouls",
-                    "Yellow Cards",
-                    "Red Cards",
-                    "Offsides",
-                    "Passes accurate",
-                  ]
-                    .filter((key) => stats.stats.home[key] !== undefined || stats.stats.away[key] !== undefined)
-                    .map((key) => (
-                      <StatRow key={key} label={key} home={stats.stats.home[key] ?? null} away={stats.stats.away[key] ?? null} />
-                    ))}
-                </>
-              )}
-            </div>
+      {open && match.odds && (
+        <div
+          className="border-t px-4 py-3"
+          style={{ borderColor: "rgba(255,255,255,0.07)" }}
+        >
+          <div className="flex items-center justify-around">
+            {([
+              { label: "1", value: match.odds.bet1 },
+              { label: "X", value: match.odds.betX },
+              { label: "2", value: match.odds.bet2 },
+            ] as const).map((o) => (
+              <div key={o.label} className="flex flex-col items-center gap-1">
+                <span
+                  className="text-[11px] font-bold uppercase"
+                  style={{ color: "rgba(255,215,0,0.7)" }}
+                >
+                  {o.label}
+                </span>
+                <span
+                  className="rounded-lg px-3 py-1 text-sm font-bold text-white tabular-nums"
+                  style={{ background: "rgba(255,255,255,0.07)" }}
+                >
+                  {o.value.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {match.odds.bookmaker && (
+            <p
+              className="mt-2 text-center text-[10px]"
+              style={{ color: "rgba(255,255,255,0.2)" }}
+            >
+              {match.odds.bookmaker}
+            </p>
           )}
         </div>
       )}
@@ -398,7 +348,67 @@ function FixtureCard({
   );
 }
 
-// ─── PAGINA ──────────────────────────────────────────────────────────────────
+// Partita FINITA — score finale, non espandibile
+function FinishedMatchCard({ match }: { match: Match }) {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-xl border px-4 py-3"
+      style={{
+        borderColor: "rgba(255,255,255,0.06)",
+        background: "rgba(0,0,0,0.25)",
+        backdropFilter: "blur(12px)",
+      }}
+    >
+      <TeamDisplay name={match.homeTeam} logo={match.homeLogo} align="left" />
+
+      <div className="flex min-w-[80px] flex-col items-center">
+        <span className="text-lg font-bold tabular-nums text-white">
+          {match.score?.home ?? 0} – {match.score?.away ?? 0}
+        </span>
+        <span
+          className="text-[10px] font-semibold uppercase"
+          style={{ color: "rgba(255,255,255,0.3)" }}
+        >
+          {match.statusShort}
+        </span>
+      </div>
+
+      <TeamDisplay name={match.awayTeam} logo={match.awayLogo} align="right" />
+    </div>
+  );
+}
+
+// Sezione collassabile generica (Future / Risultati)
+function Section({
+  title, count, accent, children,
+}: {
+  title: string; count: number; accent: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-xl border px-4 py-3 transition-colors hover:bg-white/5"
+        style={{
+          borderColor: "rgba(255,255,255,0.08)",
+          background: "rgba(0,0,0,0.3)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: accent }}>
+          {title} — {count}
+        </span>
+        {open
+          ? <ChevronUp   className="h-4 w-4" style={{ color: "rgba(255,255,255,0.35)" }} />
+          : <ChevronDown className="h-4 w-4" style={{ color: "rgba(255,255,255,0.35)" }} />}
+      </button>
+      {open && <div className="mt-2 space-y-2">{children}</div>}
+    </section>
+  );
+}
+
+// ─── PAGINA ───────────────────────────────────────────────────────────────────
 function LivePage() {
   const { user, ready } = useSession();
   const navigate = useNavigate();
@@ -407,254 +417,176 @@ function LivePage() {
     if (ready && !user) navigate({ to: "/" });
   }, [ready, user, navigate]);
 
-  // 1. Carica lista partite da Supabase (per kickoff_at)
-  const { data: supabaseMatches } = useQuery({
-    queryKey: ["matches-kickoff"],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("matches").select("id,kickoff_at");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const [matches, setMatches]         = useState<Match[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // 2. Lista completa fixture API-Football (cache 1/giorno)
-  const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
-  const [loadingFixtures, setLoadingFixtures] = useState(true);
+  async function loadData(force = false) {
+    setError(null);
+    try {
+      // 1. Fixtures (cache 30 min)
+      let fixtures = force
+        ? null
+        : readCache<Match[]>(LS_FIX, LS_FIX_TS, FIXTURES_TTL);
+
+      if (!fixtures) {
+        fixtures = await apiFetchFixtures();
+        writeCache(LS_FIX, LS_FIX_TS, fixtures);
+      }
+
+      // 2. Odds (cache 24h) — solo se ci sono partite non finite
+      const needOdds = fixtures.some((m) => m.status !== "finished");
+      let oddsEvents: OddsEvent[] = [];
+
+      if (needOdds) {
+        const cached = force
+          ? null
+          : readCache<OddsEvent[]>(LS_ODDS, LS_ODDS_TS, ODDS_TTL);
+
+        if (cached) {
+          oddsEvents = cached;
+        } else {
+          try {
+            oddsEvents = await apiFetchOdds();
+            writeCache(LS_ODDS, LS_ODDS_TS, oddsEvents);
+          } catch (e) {
+            // Le odds non sono bloccanti
+            console.warn("[live] odds fetch fallito:", e);
+          }
+        }
+      }
+
+      // 3. Merge
+      setMatches(mergeOdds(fixtures, oddsEvents));
+      setLastUpdated(new Date());
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Errore sconosciuto");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
-    const cached = loadFixturesCache();
-    if (cached) {
-      setFixtures(cached);
-      setLoadingFixtures(false);
-      return;
-    }
-    fetchAllFixtures()
-      .then((data) => {
-        console.log("[LIVE] fixtures caricati:", data.length, data[0]);
-        saveFixturesCache(data);
-        setFixtures(data);
-      })
-      .finally(() => setLoadingFixtures(false));
+    loadData();
   }, [user]);
 
-  // 3. Polling live
-  const [liveFixtureId, setLiveFixtureId] = useState<number | null>(null);
-  const [liveStats, setLiveStats] = useState<FixtureStats | null>(null);
-  const kickoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pastOpen, setPastOpen] = useState(false);
-  const [futureOpen, setFutureOpen] = useState(true);
+  // ─── Filtraggio ───────────────────────────────────────────────────────────
+  const liveMatch = matches
+    .filter((m) => m.status === "live")
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] ?? null;
 
-  // Aggiorna anche il summary nella lista fixtures con score live
-  const [liveFixtureOverride, setLiveFixtureOverride] = useState<Partial<FixtureSummary> | null>(null);
-
-  async function globalDoPoll(fixtureId: number, force = false) {
-  const lastPoll = Number(localStorage.getItem(LS_LAST_POLL) ?? 0);
-  const elapsed = Date.now() - lastPoll;
-  if (!force && elapsed < POLL_MS) {
-    console.log("[LIVE] poll saltato, ultimo poll", Math.round(elapsed / 1000), "sec fa");
-    return;
-  }
-  localStorage.setItem(LS_LAST_POLL, String(Date.now()));
-  console.log("[LIVE] globalDoPoll chiamato per fixtureId:", fixtureId);
-  try {
-    const stats = await fetchFixtureStats(fixtureId);
-    console.log("[LIVE] stats ricevute:", stats);
-    pollEventTarget.dispatchEvent(
-      new CustomEvent("poll-result", { detail: { fixtureId, stats } })
-    );
-    if (FINISHED_STATUSES.includes(stats.statusShort)) {
-      saveStatsCache(stats);
-      if (globalPollInterval) { clearInterval(globalPollInterval); globalPollInterval = null; }
-      globalLiveFixtureId = null;
-    }
-  } catch {}
-}
-
-  useEffect(() => {
-  if (!supabaseMatches || !user) return;
-
-  const now = Date.now();
-  const upcoming = supabaseMatches
-    .map((m) => ({ ...m, kickoffMs: new Date(m.kickoff_at).getTime() }))
-    .filter((m) => {
-      const sinceKickoff = now - m.kickoffMs;
-      return sinceKickoff > -5 * 60 * 1000 && sinceKickoff < 200 * 60 * 1000;
-    })
-    .sort((a, b) => a.kickoffMs - b.kickoffMs);
-
-  if (!upcoming.length) return;
-
-  const next = upcoming[0];
-  const delayMs = Math.max(0, next.kickoffMs + KICKOFF_DELAY_MS - now);
-  console.log("[LIVE] Partita trovata:", next, "delayMs:", delayMs);
-
-  kickoffTimerRef.current = setTimeout(async () => {
-    console.log("[LIVE] Timer scattato, cerco fixture live...");
-    const id = await findLiveFixtureId();
-    console.log("[LIVE] fixture_id trovato:", id);
-    if (!id) {
-      console.log("[LIVE] Nessuna partita live trovata dall'API");
-      return;
-    }
-    globalLiveFixtureId = id;
-    setLiveFixtureId(id);
-
-    const lastPoll = Number(localStorage.getItem(LS_LAST_POLL) ?? 0);
-    const neverPolled = lastPoll === 0;
-    await globalDoPoll(id, neverPolled);
-
-    if (!globalPollInterval) {
-      globalPollInterval = setInterval(() => {
-        if (globalLiveFixtureId) globalDoPoll(globalLiveFixtureId);
-      }, POLL_MS);
-    }
-  }, delayMs);
-
-  // Cleanup: solo il kickoff timer, NON l'interval globale
-  return () => {
-    if (kickoffTimerRef.current) clearTimeout(kickoffTimerRef.current);
-  };
-}, [supabaseMatches, user]);
-
-// Ascolta gli eventi di poll e aggiorna lo stato React
-useEffect(() => {
-  function onPollResult(e: Event) {
-    const { fixtureId, stats } = (e as CustomEvent).detail;
-    setLiveStats(stats);
-    setLiveFixtureOverride({
-      id: fixtureId,
-      statusShort: stats.statusShort,
-      statusElapsed: stats.statusElapsed,
-      homeGoals: stats.homeGoals,
-      awayGoals: stats.awayGoals,
-    });
-    if (FINISHED_STATUSES.includes(stats.statusShort)) setLiveFixtureId(null);
-  }
-  pollEventTarget.addEventListener("poll-result", onPollResult);
-  return () => pollEventTarget.removeEventListener("poll-result", onPollResult);
-}, []);
-
-  // Merge fixture list con override live
-  const mergedFixtures = fixtures.map((f) => {
-    if (liveFixtureOverride && f.id === liveFixtureOverride.id) {
-      return { ...f, ...liveFixtureOverride };
-    }
-    return f;
-  });
-
-  const now = Date.now();
-
-  // Separa live, future e passate
-  const liveFixtures = mergedFixtures.filter((f) => LIVE_STATUSES.includes(f.statusShort));
-  const futureFixtures = mergedFixtures
-    .filter((f) => !LIVE_STATUSES.includes(f.statusShort) && !FINISHED_STATUSES.includes(f.statusShort))
+  const futureMatches = matches
+    .filter((m) => m.status === "future")
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const pastFixtures = mergedFixtures
-    .filter((f) => FINISHED_STATUSES.includes(f.statusShort))
+
+  const finishedMatches = matches
+    .filter((m) => m.status === "finished")
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  
-
   if (!ready || !user) return null;
-
-  function renderCard(f: FixtureSummary) {
-    return (
-      <FixtureCard
-        key={f.id}
-        fixture={f}
-        liveStats={liveFixtureId === f.id ? liveStats : null}
-        supabaseKickoff={
-          supabaseMatches?.find((m) => {
-            const d1 = new Date(m.kickoff_at).getTime();
-            const d2 = new Date(f.date).getTime();
-            return Math.abs(d1 - d2) < 10 * 60 * 1000;
-          })?.kickoff_at ?? null
-        }
-      />
-    );
-  }
 
   return (
     <AppShell>
       <div className="space-y-6">
-        <header>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-white">
-            <Tv2 className="h-6 w-6" style={{ color: "#FFD700" }} />
-            Live Scores
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
-            FIFA World Cup 2026 — updated every 6 minutes during the matches.
-          </p>
+
+        {/* Header */}
+        <header className="flex items-start justify-between">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-white">
+              <Tv2 className="h-6 w-6" style={{ color: "#FFD700" }} />
+              Live &amp; Fixtures
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
+              FIFA World Cup 2026
+              {lastUpdated && (
+                <span style={{ color: "rgba(255,255,255,0.25)" }}>
+                  {" "}· {lastUpdated.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+            </p>
+          </div>
+
+          <button
+            onClick={() => { setLoading(true); loadData(true); }}
+            disabled={loading}
+            className="mt-1 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5 disabled:opacity-40"
+            style={{ borderColor: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+            Aggiorna
+          </button>
         </header>
 
-        {loadingFixtures ? (
-          <div style={{ color: "rgba(255,255,255,0.5)" }}>Loading fixtures…</div>
-        ) : mergedFixtures.length === 0 ? (
-          <div className="rounded-xl border p-10 text-center text-sm"
-            style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}>
-            No fixtures available.
+        {/* Loading */}
+        {loading && (
+          <div className="flex justify-center py-16">
+            <div
+              className="h-8 w-8 animate-spin rounded-full border-2"
+              style={{ borderColor: "rgba(255,215,0,0.3)", borderTopColor: "#FFD700" }}
+            />
           </div>
-        ) : (
+        )}
+
+        {/* Errore */}
+        {!loading && error && (
+          <div
+            className="rounded-xl border px-5 py-4 text-sm"
+            style={{
+              borderColor: "rgba(239,68,68,0.3)",
+              background: "rgba(239,68,68,0.06)",
+            }}
+          >
+            <p className="font-medium text-red-400">Errore nel caricamento</p>
+            <p className="mt-1" style={{ color: "rgba(255,255,255,0.45)" }}>{error}</p>
+            <button
+              onClick={() => { setLoading(true); loadData(true); }}
+              className="mt-3 text-xs font-medium underline"
+              style={{ color: "rgba(255,215,0,0.7)" }}
+            >
+              Riprova
+            </button>
+          </div>
+        )}
+
+        {/* Vuoto */}
+        {!loading && !error && matches.length === 0 && (
+          <div
+            className="rounded-xl border px-5 py-12 text-center text-sm"
+            style={{ borderColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
+          >
+            Nessuna partita disponibile.
+          </div>
+        )}
+
+        {/* Contenuto */}
+        {!loading && !error && matches.length > 0 && (
           <div className="space-y-4">
 
             {/* LIVE */}
-            {liveFixtures.length > 0 && (
-              <section className="space-y-2">
-                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest"
-                  style={{ color: "#ef4444" }}>
-                  <span className="h-2 w-2 rounded-full bg-red-500" style={{ animation: "pulse 1.5s ease-in-out infinite" }} />
-                  Live now
-                </h2>
-                {liveFixtures.map(renderCard)}
-              </section>
+            {liveMatch && <LiveMatchCard match={liveMatch} />}
+
+            {/* FUTURE */}
+            {futureMatches.length > 0 && (
+              <Section
+                title="Partite Future"
+                count={futureMatches.length}
+                accent="rgba(255,215,0,0.75)"
+              >
+                {futureMatches.map((m) => <FutureMatchCard key={m.id} match={m} />)}
+              </Section>
             )}
 
-            {/* FUTURE — pannello espandibile */}
-            {futureFixtures.length > 0 && (
-              <section>
-                <button
-                  onClick={() => setFutureOpen((v) => !v)}
-                  className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors hover:bg-white/5"
-                  style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)" }}
-                >
-                  <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(255,215,0,0.8)" }}>
-                    Upcoming — {futureFixtures.length} matches
-                  </span>
-                  {futureOpen
-                    ? <ChevronUp className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />
-                    : <ChevronDown className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />}
-                </button>
-                {futureOpen && (
-                  <div className="mt-2 space-y-2">
-                    {futureFixtures.map(renderCard)}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* PAST — pannello espandibile, chiuso di default */}
-            {pastFixtures.length > 0 && (
-              <section>
-                <button
-                  onClick={() => setPastOpen((v) => !v)}
-                  className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors hover:bg-white/5"
-                  style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)" }}
-                >
-                  <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.5)" }}>
-                    Results — {pastFixtures.length} matches
-                  </span>
-                  {pastOpen
-                    ? <ChevronUp className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />
-                    : <ChevronDown className="h-4 w-4" style={{ color: "rgba(255,255,255,0.4)" }} />}
-                </button>
-                {pastOpen && (
-                  <div className="mt-2 space-y-2">
-                    {pastFixtures.map(renderCard)}
-                  </div>
-                )}
-              </section>
+            {/* RISULTATI */}
+            {finishedMatches.length > 0 && (
+              <Section
+                title="Risultati"
+                count={finishedMatches.length}
+                accent="rgba(255,255,255,0.4)"
+              >
+                {finishedMatches.map((m) => <FinishedMatchCard key={m.id} match={m} />)}
+              </Section>
             )}
 
           </div>
