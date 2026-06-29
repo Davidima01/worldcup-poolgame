@@ -11,7 +11,7 @@ export const Route = createFileRoute("/live")({
 });
 
 // ─── EDGE FUNCTION ────────────────────────────────────────────────────────────
-const PROXY = "https://dtaseikeklfsknemnpus.supabase.co/functions/v1/live-proxy";
+const PROXY = "https://dtaseikeklfsknemnpus.supabase.co/functions/v1/bright-handler";
 
 // ─── TIMING (localStorage) ────────────────────────────────────────────────────
 const FIXTURES_TTL = 30 * 60 * 1000;       // 30 minuti
