@@ -501,7 +501,9 @@ function LivePage() {
     globalLiveFixtureId = id;
     setLiveFixtureId(id);
 
-    await globalDoPoll(id, true);
+    const lastPoll = Number(localStorage.getItem(LS_LAST_POLL) ?? 0);
+    const neverPolled = lastPoll === 0;
+    await globalDoPoll(id, neverPolled);
 
     if (!globalPollInterval) {
       globalPollInterval = setInterval(() => {
