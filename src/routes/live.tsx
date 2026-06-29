@@ -58,6 +58,11 @@ const LS_STATS_PREFIX = "wc2026_stats_";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const LS_LAST_POLL = "wc2026_last_poll";
 
+// ─── POLLING GLOBALE (sopravvive ai re-render) ──────────────────────────────
+let globalPollInterval: ReturnType<typeof setInterval> | null = null;
+let globalLiveFixtureId: number | null = null;
+const pollEventTarget = new EventTarget();
+
 function loadFixturesCache(): FixtureSummary[] | null {
   try {
     const ts = localStorage.getItem(LS_FIXTURES_TS);
@@ -94,15 +99,20 @@ async function fetchAllFixtures(): Promise<FixtureSummary[]> {
   );
   const json = await res.json();
   return (json.response ?? []).map((f: any): FixtureSummary => {
-    // Se abbiamo già la cache delle statistiche finali per questa partita,
-    // usiamo sempre quello come fonte di verità per status e score
     const cached = loadStatsCache(f.id);
+    const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+    const cacheIsStale =
+      cached &&
+      LIVE_STATUSES.includes(cached.statusShort) &&
+      new Date(f.date).getTime() < threeHoursAgo;
+    const useCache = cached && !cacheIsStale;
+    if (cacheIsStale) localStorage.removeItem(`${LS_STATS_PREFIX}${f.id}`);
     return {
       id: f.id,
       date: f.date,
       round: f.round ?? "Group Stage",
-      statusShort: cached?.statusShort ?? f.statusShort ?? "NS",
-      statusElapsed: cached?.statusElapsed ?? f.elapsed ?? null,
+      statusShort: useCache ? cached!.statusShort : (f.statusShort ?? "NS"),
+      statusElapsed: useCache ? cached!.statusElapsed : (f.elapsed ?? null),
       homeTeam: f.homeTeam?.name ?? "",
       homeLogo: f.homeTeam?.logo ?? "",
       awayTeam: f.awayTeam?.name ?? "",
@@ -432,7 +442,6 @@ function LivePage() {
   // 3. Polling live
   const [liveFixtureId, setLiveFixtureId] = useState<number | null>(null);
   const [liveStats, setLiveStats] = useState<FixtureStats | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const kickoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
   const [futureOpen, setFutureOpen] = useState(true);
@@ -440,80 +449,90 @@ function LivePage() {
   // Aggiorna anche il summary nella lista fixtures con score live
   const [liveFixtureOverride, setLiveFixtureOverride] = useState<Partial<FixtureSummary> | null>(null);
 
-  async function doPoll(fixtureId: number, force = false) {
-    try {
-      // Controlla se sono passati almeno 6 minuti dall'ultimo poll
-      const lastPoll = Number(localStorage.getItem(LS_LAST_POLL) ?? 0);
-      const elapsed = Date.now() - lastPoll;
-      if (!force && elapsed < POLL_MS) {
-        console.log("[LIVE] poll saltato, ultimo poll", Math.round(elapsed / 1000), "secondi fa");
-        return;
-      }
-      localStorage.setItem(LS_LAST_POLL, String(Date.now()));
-      console.log("[LIVE] doPoll chiamato per fixtureId:", fixtureId);
-      const stats = await fetchFixtureStats(fixtureId);
-      console.log("[LIVE] stats ricevute:", stats);
-      setLiveStats(stats);
-      setLiveFixtureOverride({
-        id: fixtureId,
-        statusShort: stats.statusShort,
-        statusElapsed: stats.statusElapsed,
-        homeGoals: stats.homeGoals,
-        awayGoals: stats.awayGoals,
-      });
-
-      // Se la partita è finita, salva in cache e ferma il polling
-      if (FINISHED_STATUSES.includes(stats.statusShort)) {
-        saveStatsCache(stats);
-        if (pollRef.current) clearInterval(pollRef.current);
-        setLiveFixtureId(null);
-      }
-    } catch {}
+  async function globalDoPoll(fixtureId: number, force = false) {
+  const lastPoll = Number(localStorage.getItem(LS_LAST_POLL) ?? 0);
+  const elapsed = Date.now() - lastPoll;
+  if (!force && elapsed < POLL_MS) {
+    console.log("[LIVE] poll saltato, ultimo poll", Math.round(elapsed / 1000), "sec fa");
+    return;
   }
+  localStorage.setItem(LS_LAST_POLL, String(Date.now()));
+  console.log("[LIVE] globalDoPoll chiamato per fixtureId:", fixtureId);
+  try {
+    const stats = await fetchFixtureStats(fixtureId);
+    console.log("[LIVE] stats ricevute:", stats);
+    pollEventTarget.dispatchEvent(
+      new CustomEvent("poll-result", { detail: { fixtureId, stats } })
+    );
+    if (FINISHED_STATUSES.includes(stats.statusShort)) {
+      saveStatsCache(stats);
+      if (globalPollInterval) { clearInterval(globalPollInterval); globalPollInterval = null; }
+      globalLiveFixtureId = null;
+    }
+  } catch {}
+}
 
   useEffect(() => {
-    if (!supabaseMatches || !user) return;
+  if (!supabaseMatches || !user) return;
 
-    const now = Date.now();
+  const now = Date.now();
+  const upcoming = supabaseMatches
+    .map((m) => ({ ...m, kickoffMs: new Date(m.kickoff_at).getTime() }))
+    .filter((m) => {
+      const sinceKickoff = now - m.kickoffMs;
+      return sinceKickoff > -5 * 60 * 1000 && sinceKickoff < 200 * 60 * 1000;
+    })
+    .sort((a, b) => a.kickoffMs - b.kickoffMs);
 
-    // Trova la partita di Supabase che dovrebbe essere in corso o sta per iniziare
-    const upcoming = supabaseMatches
-      .map((m) => ({ ...m, kickoffMs: new Date(m.kickoff_at).getTime() }))
-      .filter((m) => {
-        const sinceKickoff = now - m.kickoffMs;
-        // Tra -5 min prima (non ancora iniziata) e +200 min dopo (max con rigori)
-        return sinceKickoff > -5 * 60 * 1000 && sinceKickoff < 200 * 60 * 1000;
-      })
-      .sort((a, b) => a.kickoffMs - b.kickoffMs);
+  if (!upcoming.length) return;
 
-    if (!upcoming.length) return;
+  const next = upcoming[0];
+  const delayMs = Math.max(0, next.kickoffMs + KICKOFF_DELAY_MS - now);
+  console.log("[LIVE] Partita trovata:", next, "delayMs:", delayMs);
 
-    const next = upcoming[0];
-    const delayMs = Math.max(0, next.kickoffMs + KICKOFF_DELAY_MS - now);
-    console.log("[LIVE] Partita trovata:", next, "delayMs:", delayMs);
+  kickoffTimerRef.current = setTimeout(async () => {
+    console.log("[LIVE] Timer scattato, cerco fixture live...");
+    const id = await findLiveFixtureId();
+    console.log("[LIVE] fixture_id trovato:", id);
+    if (!id) {
+      console.log("[LIVE] Nessuna partita live trovata dall'API");
+      return;
+    }
+    globalLiveFixtureId = id;
+    setLiveFixtureId(id);
 
-    kickoffTimerRef.current = setTimeout(async () => {
-      console.log("[LIVE] Timer scattato, cerco fixture live...");
-      const id = await findLiveFixtureId();
-      console.log("[LIVE] fixture_id trovato:", id);
-      if (!id) {
-        console.log("[LIVE] Nessuna partita live trovata dall'API");
-        return;
-      }
-      setLiveFixtureId(id);
+    await globalDoPoll(id, true);
 
-      // Primo poll immediato
-      await doPoll(id, true);
+    if (!globalPollInterval) {
+      globalPollInterval = setInterval(() => {
+        if (globalLiveFixtureId) globalDoPoll(globalLiveFixtureId);
+      }, POLL_MS);
+    }
+  }, delayMs);
 
-      // Poi ogni 6 minuti
-      pollRef.current = setInterval(() => doPoll(id), POLL_MS);
-    }, delayMs);
+  // Cleanup: solo il kickoff timer, NON l'interval globale
+  return () => {
+    if (kickoffTimerRef.current) clearTimeout(kickoffTimerRef.current);
+  };
+}, [supabaseMatches, user]);
 
-    return () => {
-      if (kickoffTimerRef.current) clearTimeout(kickoffTimerRef.current);
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [supabaseMatches, user]);
+// Ascolta gli eventi di poll e aggiorna lo stato React
+useEffect(() => {
+  function onPollResult(e: Event) {
+    const { fixtureId, stats } = (e as CustomEvent).detail;
+    setLiveStats(stats);
+    setLiveFixtureOverride({
+      id: fixtureId,
+      statusShort: stats.statusShort,
+      statusElapsed: stats.statusElapsed,
+      homeGoals: stats.homeGoals,
+      awayGoals: stats.awayGoals,
+    });
+    if (FINISHED_STATUSES.includes(stats.statusShort)) setLiveFixtureId(null);
+  }
+  pollEventTarget.addEventListener("poll-result", onPollResult);
+  return () => pollEventTarget.removeEventListener("poll-result", onPollResult);
+}, []);
 
   // Merge fixture list con override live
   const mergedFixtures = fixtures.map((f) => {
