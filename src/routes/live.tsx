@@ -56,6 +56,7 @@ const LS_FIXTURES = "wc2026_fixtures";
 const LS_FIXTURES_TS = "wc2026_last_fetch";
 const LS_STATS_PREFIX = "wc2026_stats_";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const LS_LAST_POLL = "wc2026_last_poll";
 
 function loadFixturesCache(): FixtureSummary[] | null {
   try {
@@ -439,8 +440,16 @@ function LivePage() {
   // Aggiorna anche il summary nella lista fixtures con score live
   const [liveFixtureOverride, setLiveFixtureOverride] = useState<Partial<FixtureSummary> | null>(null);
 
-  async function doPoll(fixtureId: number) {
+  async function doPoll(fixtureId: number, force = false) {
     try {
+      // Controlla se sono passati almeno 6 minuti dall'ultimo poll
+      const lastPoll = Number(localStorage.getItem(LS_LAST_POLL) ?? 0);
+      const elapsed = Date.now() - lastPoll;
+      if (!force && elapsed < POLL_MS) {
+        console.log("[LIVE] poll saltato, ultimo poll", Math.round(elapsed / 1000), "secondi fa");
+        return;
+      }
+      localStorage.setItem(LS_LAST_POLL, String(Date.now()));
       console.log("[LIVE] doPoll chiamato per fixtureId:", fixtureId);
       const stats = await fetchFixtureStats(fixtureId);
       console.log("[LIVE] stats ricevute:", stats);
@@ -494,7 +503,7 @@ function LivePage() {
       setLiveFixtureId(id);
 
       // Primo poll immediato
-      await doPoll(id);
+      await doPoll(id, true);
 
       // Poi ogni 6 minuti
       pollRef.current = setInterval(() => doPoll(id), POLL_MS);
