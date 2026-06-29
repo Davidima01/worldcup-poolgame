@@ -585,7 +585,7 @@ useEffect(() => {
             Live Scores
           </h1>
           <p className="mt-1 text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
-            FIFA World Cup 2026 — updated every 6 minutes during matches.
+            FIFA World Cup 2026 — updated every 6 minutes during the matches.
           </p>
         </header>
 
