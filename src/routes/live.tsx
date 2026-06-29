@@ -92,19 +92,24 @@ async function fetchAllFixtures(): Promise<FixtureSummary[]> {
     `${PROXY_BASE}?path=/fixtures&league=${LEAGUE}&season=${SEASON}`
   );
   const json = await res.json();
-  return (json.response ?? []).map((f: any): FixtureSummary => ({
-    id: f.id,
-    date: f.date,
-    round: f.round ?? "Group Stage",
-    statusShort: f.statusShort ?? "NS",
-    statusElapsed: f.elapsed ?? null,
-    homeTeam: f.homeTeam?.name ?? "",
-    homeLogo: f.homeTeam?.logo ?? "",
-    awayTeam: f.awayTeam?.name ?? "",
-    awayLogo: f.awayTeam?.logo ?? "",
-    homeGoals: f.goalsHome ?? null,
-    awayGoals: f.goalsAway ?? null,
-  }));
+  return (json.response ?? []).map((f: any): FixtureSummary => {
+    // Se abbiamo già la cache delle statistiche finali per questa partita,
+    // usiamo sempre quello come fonte di verità per status e score
+    const cached = loadStatsCache(f.id);
+    return {
+      id: f.id,
+      date: f.date,
+      round: f.round ?? "Group Stage",
+      statusShort: cached?.statusShort ?? f.statusShort ?? "NS",
+      statusElapsed: cached?.statusElapsed ?? f.elapsed ?? null,
+      homeTeam: f.homeTeam?.name ?? "",
+      homeLogo: f.homeTeam?.logo ?? "",
+      awayTeam: f.awayTeam?.name ?? "",
+      awayLogo: f.awayTeam?.logo ?? "",
+      homeGoals: cached?.homeGoals ?? f.goalsHome ?? null,
+      awayGoals: cached?.awayGoals ?? f.goalsAway ?? null,
+    };
+  });
 }
 
 async function findLiveFixtureId(): Promise<number | null> {
